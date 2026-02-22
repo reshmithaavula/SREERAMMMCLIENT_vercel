@@ -76,33 +76,37 @@ export default function LoginPage() {
                 });
 
                 const contentType = res.headers.get("content-type");
-                if (!res.ok || !contentType || !contentType.includes("application/json")) {
-                    setError('Server error or account exists. Please try again.');
+
+                // If it's a JSON response, we want to parse it to get the error message
+                if (contentType && contentType.includes("application/json")) {
+                    const data = await res.json();
+                    if (!res.ok) {
+                        setError(data.message || 'Registration failed');
+                        setLoading(false);
+                        return;
+                    }
+                    // If OK, proceed to login
+                } else if (!res.ok) {
+                    // Hard error (not JSON)
+                    setError('Server error. Please check your connection.');
                     setLoading(false);
                     return;
                 }
-                const data = await res.json();
+                console.log('Registration successful, logging in...');
+                const loginRes = await signIn('credentials', {
+                    email: email.toLowerCase().trim(),
+                    password,
+                    redirect: false,
+                });
 
-                if (!res.ok) {
-                    setError(data.message || 'Registration failed');
+                if (loginRes?.error) {
+                    setError('Account created, but login failed. Please login manually.');
+                    setIsLogin(true);
                     setLoading(false);
                 } else {
-                    console.log('Registration successful, logging in...');
-                    const loginRes = await signIn('credentials', {
-                        email: email.toLowerCase().trim(),
-                        password,
-                        redirect: false,
-                    });
-
-                    if (loginRes?.error) {
-                        setError('Account created, but login failed. Please login manually.');
-                        setIsLogin(true);
-                        setLoading(false);
-                    } else {
-                        setLoading(false);
-                        router.push('/');
-                        router.refresh();
-                    }
+                    setLoading(false);
+                    router.push('/');
+                    router.refresh();
                 }
             }
         } catch (err: any) {
