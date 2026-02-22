@@ -1,10 +1,13 @@
-export const runtime = "nodejs";
-
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
+import crypto from "crypto";
 
-const prisma = new PrismaClient();
+// Helper to hash passwords consistently with auth.ts
+function hashPassword(password: string) {
+    const salt = crypto.randomBytes(16).toString("hex");
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+    return `${salt}:${hash}`;
+}
 
 export async function POST(req: NextRequest) {
     try {
@@ -28,7 +31,7 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = hashPassword(password);
 
         const user = await prisma.user.create({
             data: {
