@@ -30,13 +30,13 @@ const columns = [
             </div>
         )
     },
-    { header: 'Price', accessor: 'price', render: (val: number) => <span className="font-bold text-[12px]">${(val || 0).toFixed(2)}</span> },
+    { header: 'Price', accessor: 'price', render: (val: number) => <span className="font-bold text-[12px]">${(val ?? 0).toFixed(2)}</span> },
     {
         header: 'OCHG %',
         accessor: 'oChangePercent',
         render: (val: number, row: any) => {
-            const price = row.price || 0;
-            const open = row.openPrice || 0;
+            const price = row.price ?? 0;
+            const open = row.openPrice ?? 0;
             const oPercent = open > 0 ? ((price - open) / open) * 100 : 0;
             return (
                 <span className={`font-bold tabular-nums text-[12px] ${oPercent >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
@@ -48,16 +48,19 @@ const columns = [
     {
         header: 'DAY %',
         accessor: 'changePercent',
-        render: (val: number) => (
-            <span className={`font-bold tabular-nums text-[12px] ${val >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
-                {val >= 0 ? '+' : ''}{val.toFixed(2)}%
-            </span>
-        )
+        render: (val: number) => {
+            const v = val ?? 0;
+            return (
+                <span className={`font-bold tabular-nums text-[12px] ${v >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
+                    {v >= 0 ? '+' : ''}{v.toFixed(2)}%
+                </span>
+            );
+        }
     },
     {
         header: 'oPrice',
         accessor: 'openPrice',
-        render: (val: number) => <span className="text-[var(--text-primary)] font-bold text-[12px]">${(val || 0).toFixed(2)}</span>
+        render: (val: number) => <span className="text-[var(--text-primary)] font-bold text-[12px]">${(val ?? 0).toFixed(2)}</span>
     },
 ];
 
@@ -83,7 +86,7 @@ const miniColumns = [
             <div className="flex flex-col">
                 <div className="flex items-center gap-1">
                     <span className="font-bold text-[12px]">{v}</span>
-                    {row.common_flag === 1 && (
+                    {row.commonFlag === 1 && (
                         <span className="text-[9px] text-yellow-500 font-bold" title="Common Signal (Multi-Timeframe)">★</span>
                     )}
                 </div>
@@ -99,15 +102,18 @@ const miniColumns = [
             </div>
         )
     },
-    { header: 'Price', accessor: 'price', render: (v: number) => <span className="font-bold text-[12px] tabular-nums">${v.toFixed(2)}</span> },
+    { header: 'Price', accessor: 'price', render: (v: number) => <span className="font-bold text-[12px] tabular-nums">${(v ?? 0).toFixed(2)}</span> },
     {
         header: '%',
         accessor: 'changePercent',
-        render: (v: number) => (
-            <span className={`font-bold tabular-nums text-[12px] ${v >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
-                {v >= 0 ? '+' : ''}{v.toFixed(2)}%
-            </span>
-        )
+        render: (val: number) => {
+            const v = val ?? 0;
+            return (
+                <span className={`font-bold tabular-nums text-[12px] ${v >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
+                    {v >= 0 ? '+' : ''}{v.toFixed(2)}%
+                </span>
+            );
+        }
     }
 ];
 

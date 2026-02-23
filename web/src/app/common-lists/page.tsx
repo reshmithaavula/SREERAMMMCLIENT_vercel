@@ -12,27 +12,27 @@ const Table = dynamic(() => import('@/components/Table'), {
 
 const columns = [
     { header: 'Ticker', accessor: 'ticker', render: (val: string) => <span className="font-bold text-[var(--text-primary)]">{val || '---'}</span> },
-    { header: 'Last Price', accessor: 'price', render: (val: number) => `$${(val || 0).toFixed(2)}` },
+    { header: 'Last Price', accessor: 'price', render: (val: number) => `$${(val ?? 0).toFixed(2)}` },
     {
         header: 'oChange %',
         accessor: 'oChangePercent',
         render: (val: number) => (
-            <span className="font-bold tabular-nums" style={{ color: (val || 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                {(val || 0).toFixed(2)}%
+            <span className="font-bold tabular-nums" style={{ color: (val ?? 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                {(val ?? 0).toFixed(2)}%
             </span>
         )
     },
     {
         header: 'oPrice',
         accessor: 'openPrice',
-        render: (val: number, row: any) => (val || row?.prevClose || 0).toFixed(2)
+        render: (val: number, row: any) => (val ?? row?.prevClose ?? 0).toFixed(2)
     },
     {
         header: 'pChange %',
         accessor: 'pChangePercent',
         render: (val: number) => (
-            <span className="font-bold tabular-nums" style={{ color: (val || 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                {(val || 0).toFixed(2)}%
+            <span className="font-bold tabular-nums" style={{ color: (val ?? 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                {(val ?? 0).toFixed(2)}%
             </span>
         )
     },

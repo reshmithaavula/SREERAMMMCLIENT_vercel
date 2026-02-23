@@ -191,9 +191,9 @@ export function PortfolioSummary({ quotes, initialHoldings = [] }: { quotes?: Re
                         </div>
                         <div className="text-right text-[var(--text-primary)] font-bold tabular-nums font-mono">{row.shares.toLocaleString()}</div>
                         <div className="text-right text-[var(--text-primary)] font-bold tabular-nums font-mono">${(row.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                        <div className={`text-right font-bold tabular-nums font-mono ${row.change >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'} whitespace-nowrap`}>
-                            {row.change > 0 ? '+' : ''}{(row.change || 0).toFixed(2)}
-                            <span className="text-[12px] ml-0.5 opacity-60">({(row.changePercent || 0).toFixed(2)}%)</span>
+                        <div className={`text-right font-bold tabular-nums font-mono ${(row.change ?? 0) >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'} whitespace-nowrap`}>
+                            {(row.change ?? 0) > 0 ? '+' : ''}{(row.change ?? 0).toFixed(2)}
+                            <span className="text-[12px] ml-0.5 opacity-60">({(row.changePercent ?? 0).toFixed(2)}%)</span>
                         </div>
                         <div className="text-right text-[var(--text-primary)] font-bold tabular-nums font-mono text-[16px]">
                             ${(row.currentValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

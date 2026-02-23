@@ -7,7 +7,7 @@ interface Mover {
     change: number;
     changePercent: number;
     openPrice?: number;
-    common_flag?: number;
+    commonFlag?: number;
 }
 
 interface MoverTableProps {
@@ -79,24 +79,24 @@ export function MoverTable({ title, movers, type }: MoverTableProps) {
                                                 <span className="font-bold text-[var(--text-primary)] text-[14px]">
                                                     {m.ticker}
                                                 </span>
-                                                {m.common_flag === 1 && (
+                                                {m.commonFlag === 1 && (
                                                     <span className="text-[9px] text-yellow-500 font-bold" title="Common Mover (Multiple Timeframes)">★</span>
                                                 )}
                                             </div>
                                         </td>
                                         <td className="px-2 py-4 text-right w-[100px]">
                                             <span className="font-bold text-[var(--text-primary)] text-[14px] tabular-nums">
-                                                ${(m.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                ${(m.price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </span>
                                         </td>
                                         <td className="px-2 py-4 text-right w-[90px]">
                                             <span className={`font-bold tabular-nums text-[13px] ${oChg >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
-                                                {m.openPrice ? (oChg > 0 ? '+' : '') + oChg.toFixed(2) + '%' : '--'}
+                                                {m.openPrice ? (oChg > 0 ? '+' : '') + (oChg ?? 0).toFixed(2) + '%' : '--'}
                                             </span>
                                         </td>
                                         <td className="px-3 py-4 text-right">
-                                            <span className={`font-bold tabular-nums text-[14px] ${m.changePercent >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
-                                                {m.changePercent > 0 ? '+' : ''}{(m.changePercent || 0).toFixed(2)}%
+                                            <span className={`font-bold tabular-nums text-[14px] ${(m.changePercent ?? 0) >= 0 ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]'}`}>
+                                                {(m.changePercent ?? 0) > 0 ? '+' : ''}{(m.changePercent ?? 0).toFixed(2)}%
                                             </span>
                                         </td>
                                     </tr>
