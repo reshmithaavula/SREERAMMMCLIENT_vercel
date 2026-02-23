@@ -48,9 +48,12 @@ export async function POST(req: NextRequest) {
             { status: 201 }
         );
     } catch (error: any) {
-        console.error("Registration error:", error);
+        console.error("Full Registration Error:", error);
         return NextResponse.json(
-            { message: `Registration failed: ${error.message || "Internal server error"}` },
+            {
+                message: `Registration failed. Error: ${error.message || "Internal server error"}`,
+                code: error.code || "UNKNOWN"
+            },
             { status: 500 }
         );
     }

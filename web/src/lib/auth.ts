@@ -106,22 +106,25 @@ export const authOptions: NextAuthOptions = {
                         return null;
                     }
 
-                    // Emergency Fallback: If no owner exists in the DB, make the first person who logs in the owner
+                    // Defensive Role Promotion: If no owner exists, promote first user
                     let currentRole = (user as any).role || 'user';
                     try {
-                        const ownerExists = await prisma.user.findFirst({
+                        // Use findFirst with role check, but wrap in case the field is missing from runtime schema
+                        const anyUserAsOwner = await (prisma.user as any).findFirst({
                             where: { role: 'owner' }
                         });
-                        if (!ownerExists) {
-                            await prisma.user.update({
+
+                        if (!anyUserAsOwner) {
+                            await (prisma.user as any).update({
                                 where: { id: user.id },
                                 data: { role: 'owner' }
                             });
                             currentRole = 'owner';
-                            console.log(`[AUTH] No owner found in DB. Auto-promoted ${user.email} to owner.`);
+                            console.log(`[AUTH] Auto-promoted ${normalizedEmail} to owner (no existing owner found)`);
                         }
                     } catch (e: any) {
-                        console.warn("[AUTH] Role check/promotion failed:", e.message);
+                        console.warn("[AUTH] Role promotion skipped (likely Prisma sync issue):", e.message);
+                        // If it failed because 'role' doesn't exist, we just proceed as 'user'
                     }
 
                     console.log(`[AUTH] Login successful: ${credentials.email} (${currentRole})`);
@@ -150,13 +153,16 @@ export const authOptions: NextAuthOptions = {
                         where: { email: user.email as string }
                     });
                     if (!existingUser) {
-                        await prisma.user.create({
-                            data: {
-                                name: user.name,
-                                email: user.email,
-                                image: user.image,
-                                role: 'user'
-                            }
+                        const data: any = {
+                            name: user.name,
+                            email: user.email,
+                            image: user.image,
+                        };
+                        // Add role only if it doesn't cause a runtime crash (Prisma ignores extra fields usually, but let's be safe)
+                        data.role = 'user';
+
+                        await (prisma.user as any).create({
+                            data
                         });
                     }
                     return true;

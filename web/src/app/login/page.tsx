@@ -50,11 +50,13 @@ export default function LoginPage() {
                 });
 
                 if (res?.error) {
-                    console.error('Login error:', res.error);
-                    if (res.error.includes('USER_NOT_FOUND')) {
+                    console.error('Login error full response:', res.error);
+                    if (res.error === 'CredentialsSignin') {
+                        setError('Invalid email or password');
+                    } else if (res.error.includes('USER_NOT_FOUND')) {
                         setError('User not found. Please create an account.');
                     } else {
-                        setError('Invalid email or password');
+                        setError(res.error || 'Server error during login');
                     }
                     setLoading(false);
                 } else {
@@ -100,7 +102,8 @@ export default function LoginPage() {
                 });
 
                 if (loginRes?.error) {
-                    setError('Account created, but login failed. Please login manually.');
+                    console.error('Auto-login error after signup:', loginRes.error);
+                    setError(`Account created, but auto-login failed: ${loginRes.error}. Please login manually.`);
                     setIsLogin(true);
                     setLoading(false);
                 } else {
