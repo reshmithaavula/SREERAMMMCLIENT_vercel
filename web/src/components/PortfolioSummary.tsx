@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { safeSetItem } from '@/lib/storage-utils';
 
 interface Holding {
@@ -15,10 +16,18 @@ const DEFAULT_HOLDINGS: Holding[] = [
     { ticker: 'TSLA', shares: 25, avgPrice: 195.00 },
     { ticker: 'AAPL', shares: 50, avgPrice: 175.00 },
     { ticker: 'AMD', shares: 40, avgPrice: 150.00 },
-    { ticker: 'AMZN', shares: 20, avgPrice: 180.00 }
+    { ticker: 'AMZN', shares: 20, avgPrice: 180.00 },
+    { ticker: 'META', shares: 15, avgPrice: 310.25 },
+    { ticker: 'NFLX', shares: 5, avgPrice: 420.00 },
+    { ticker: 'GOOGL', shares: 18, avgPrice: 135.50 },
+    { ticker: 'PLTR', shares: 100, avgPrice: 16.20 },
+    { ticker: 'MSFT', shares: 12, avgPrice: 330.10 },
+    { ticker: 'MARA', shares: 50, avgPrice: 12.50 },
+    { ticker: 'COIN', shares: 15, avgPrice: 85.00 }
 ];
 
 export function PortfolioSummary({ quotes, initialHoldings = [] }: { quotes?: Record<string, any>, initialHoldings?: Holding[] }) {
+    const { data: session } = useSession();
     const [holdings, setHoldings] = useState<Holding[]>([]);
     const [mounted, setMounted] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -67,19 +76,53 @@ export function PortfolioSummary({ quotes, initialHoldings = [] }: { quotes?: Re
         setIsEditing(false);
     };
 
-    const addHolding = () => {
+    const addHolding = async () => {
         if (!newTicker || !newShares) return;
+        const ticker = newTicker.toUpperCase();
         const shares = parseFloat(newShares);
         const cost = parseFloat(newCost) || 0;
         if (isNaN(shares)) return;
 
-        setHoldings(prev => [...prev, { ticker: newTicker.toUpperCase(), shares, avgPrice: cost }]);
+        // Optimistic UI update
+        const newHolding: Holding = { ticker, shares, avgPrice: cost };
+        setHoldings(prev => [...prev, newHolding]);
         setNewTicker('');
         setNewShares('');
         setNewCost('');
+
+        // DB Persist if logged in
+        if (session?.user) {
+            try {
+                const response = await fetch('/api/portfolio', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker, shares, avgCost: cost })
+                });
+                if (!response.ok) console.error('Failed to persist portfolio addition');
+            } catch (e) {
+                console.error('Error adding to portfolio:', e);
+            }
+        }
     };
 
-    const removeHolding = (index: number) => {
+    const removeHolding = async (index: number) => {
+        const holdingToRemove = holdings[index];
+        if (!holdingToRemove) return;
+
+        // DB Persist if logged in
+        if (session?.user) {
+            try {
+                const response = await fetch('/api/portfolio', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker: holdingToRemove.ticker })
+                });
+                if (!response.ok) console.error('Failed to persist portfolio deletion');
+            } catch (e) {
+                console.error('Error deleting from portfolio:', e);
+            }
+        }
+
         setHoldings(prev => prev.filter((_, i) => i !== index));
     };
 

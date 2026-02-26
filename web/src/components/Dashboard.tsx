@@ -52,9 +52,9 @@ export default function Dashboard({
     const losers = globalData.movers?.day?.dippers || initialLosers || [];
     const watchlist = globalData.watchlist || initialWatchlist || [];
     const news = globalData.movers?.news || [];
-    const categories: any[] = []; // Placeholder for category analysis
+    const categories = globalData.movers?.categories || [];
 
-    const portfolioHoldings = initialPortfolio;
+    const portfolioHoldings = globalData.portfolio || initialPortfolio || [];
     const [mounted, setMounted] = useState(false);
     const [engineStatus, setEngineStatus] = useState<any>(globalData.movers?.engineStatus || {
         isLive: false,
@@ -65,18 +65,16 @@ export default function Dashboard({
     const [currentTime, setCurrentTime] = useState(new Date());
     const wsRef = React.useRef<WebSocket | null>(null);
 
-    // Optimized Performance: Memoize heavy sorting operations
+    // Optimized Performance: Show relative Top and Bottom performers
     const leaders = useMemo(() => {
-        return categories
-            .filter(c => c.averageChange > 0.001) // Strictly positive
-            .sort((a, b) => b.averageChange - a.averageChange)
+        return [...categories]
+            .sort((a: any, b: any) => b.averageChange - a.averageChange)
             .slice(0, 50);
     }, [categories]);
 
     const laggards = useMemo(() => {
-        return categories
-            .filter(c => c.averageChange < -0.001) // Strictly negative
-            .sort((a, b) => a.averageChange - b.averageChange)
+        return [...categories]
+            .sort((a: any, b: any) => a.averageChange - b.averageChange)
             .slice(0, 50);
     }, [categories]);
 
@@ -157,7 +155,7 @@ export default function Dashboard({
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--card-bg)]">
                                 <MoverTable
                                     title="DAILY RIPPERS"
-                                    movers={moverData.day.rippers.slice(0, 50)}
+                                    movers={moverData?.day?.rippers?.slice(0, 50) || []}
                                     type="gainer"
                                 />
                             </div>
@@ -168,7 +166,7 @@ export default function Dashboard({
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--card-bg)]">
                                 <MoverTable
                                     title="DAILY DIPPERS"
-                                    movers={moverData.day.dippers.slice(0, 50)}
+                                    movers={moverData?.day?.dippers?.slice(0, 50) || []}
                                     type="loser"
                                 />
                             </div>

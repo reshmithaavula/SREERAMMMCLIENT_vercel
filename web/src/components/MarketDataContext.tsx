@@ -7,6 +7,7 @@ interface MarketData {
     watchlist: any[];
     movers: any;
     pennyStocks: any[];
+    portfolio: any[];
     lastUpdate: number;
 }
 
@@ -31,6 +32,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
             engineStatus: { isLive: false, session: 'Closed' }
         },
         pennyStocks: [],
+        portfolio: [],
         lastUpdate: 0
     });
     const [isLoading, setIsLoading] = useState(false);
@@ -64,7 +66,8 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
                 setData(prev => ({
                     ...prev,
                     watchlist: movJson?.watchlist || momJson?.stocks || prev.watchlist,
-                    movers: movJson || prev.movers,
+                    movers: movJson?.movers || movJson || prev.movers,
+                    portfolio: movJson?.portfolio || prev.portfolio,
                     lastUpdate: (momJson || movJson) ? Date.now() : prev.lastUpdate
                 }));
             }

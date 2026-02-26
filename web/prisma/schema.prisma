@@ -27,6 +27,8 @@ model User {
   portfolio     PortfolioHolding[]
 
   role          String    @default("user")
+  status        String    @default("approved")   // pending | approved | rejected
+  approvalToken String?   @unique                // token sent in email link
   createdAt     DateTime  @default(now())
 }
 

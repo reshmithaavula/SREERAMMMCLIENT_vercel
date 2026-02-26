@@ -134,7 +134,8 @@ export const authOptions: NextAuthOptions = {
                         name: user.name,
                         email: user.email,
                         image: user.image || null,
-                        role: currentRole
+                        role: currentRole,
+                        status: (user as any).status || 'approved',
                     };
                 } catch (error: any) {
                     console.error("[AUTH] Fatal error during authorize:", error);
@@ -178,6 +179,7 @@ export const authOptions: NextAuthOptions = {
             if (user) {
                 token.id = (user as any).id;
                 token.role = (user as any).role;
+                token.status = (user as any).status || 'approved';
             }
             return token;
         },
@@ -185,6 +187,7 @@ export const authOptions: NextAuthOptions = {
             if (token && session.user) {
                 (session.user as any).id = token.id as string;
                 (session.user as any).role = token.role as string;
+                (session.user as any).status = token.status as string;
             }
             return session;
         },

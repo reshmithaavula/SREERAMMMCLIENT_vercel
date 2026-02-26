@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import s from './admin-login.module.css';
 
+import { signIn } from 'next-auth/react';
+
 export default function AdminLoginPage() {
     const router = useRouter();
     const [email, setEmail] = useState('');
@@ -19,12 +21,20 @@ export default function AdminLoginPage() {
         setError('');
         setLoading(true);
         try {
-            // Demo credentials check
-            if (email === 'admin@stocktrack.com' && password === 'admin123') {
-                router.push('/');
-            } else {
+            const result = await signIn('credentials', {
+                redirect: false,
+                email,
+                password,
+            });
+
+            if (result?.error) {
                 setError('Invalid admin credentials.');
+            } else {
+                router.push('/');
+                router.refresh();
             }
+        } catch (err: any) {
+            setError('An error occurred during sign in.');
         } finally {
             setLoading(false);
         }

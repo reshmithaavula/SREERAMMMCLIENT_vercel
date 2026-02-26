@@ -11,17 +11,13 @@ export async function GET(req: Request) {
     const portfolioSet = new Set(portfolioTickers.map(t => t.toUpperCase()))
 
     try {
-
         // -----------------------
-        // WATCHLIST CACHE (UNCHANGED)
+        // WATCHLIST CACHE
         // -----------------------
-
-        // Try multiple possible paths for the CSV file on Vercel
         const csvPaths = [
             path.join(process.cwd(), '../Watchlist_New.csv'),
             path.join(process.cwd(), 'public/Watchlist_New.csv'),
             path.join(process.cwd(), 'Watchlist_New.csv'),
-            path.join(process.cwd(), '.next/server/public/Watchlist_New.csv')
         ];
 
         let csvPath = csvPaths[0];
@@ -40,12 +36,10 @@ export async function GET(req: Request) {
             try {
                 if (fs.existsSync(csvPath)) {
                     const stats = fs.statSync(csvPath)
-
                     if (!getGlobalCache() || stats.mtimeMs !== getGlobalCache().fileMtime) {
                         const content = fs.readFileSync(csvPath, 'utf-8')
                         const lines = content.split('\n')
                         const newSet = new Set<string>()
-
                         for (let i = 1; i < lines.length; i++) {
                             const parts = lines[i].split(',')
                             if (parts.length > 1) {
@@ -53,7 +47,6 @@ export async function GET(req: Request) {
                                 if (t) newSet.add(t)
                             }
                         }
-
                         setGlobalCache({
                             set: newSet,
                             timestamp: Date.now(),
@@ -69,9 +62,8 @@ export async function GET(req: Request) {
         const allowedTickersSet = getGlobalCache()?.set || new Set<string>()
 
         // -----------------------
-        // MOMENTUM FROM POSTGRES (FIXED)
+        // MOMENTUM FROM POSTGRES
         // -----------------------
-
         let m1 = { rippers: [] as any[], dippers: [] as any[] }
         let m5 = { rippers: [] as any[], dippers: [] as any[] }
         let m30 = { rippers: [] as any[], dippers: [] as any[] }
@@ -96,7 +88,7 @@ export async function GET(req: Request) {
                 const entry = {
                     ticker: m.ticker,
                     price: m.price || 0,
-                    change: m.changePercent || 0, // Backward compatibility
+                    change: m.changePercent || 0,
                     changePercent: m.changePercent || 0,
                     session: m.session || "Closed",
                     commonFlag: m.commonFlag || 0,
@@ -106,25 +98,20 @@ export async function GET(req: Request) {
 
                 if (m.type === "1m_ripper") m1.rippers.push(entry)
                 if (m.type === "1m_dipper") m1.dippers.push(entry)
-
                 if (m.type === "5m_ripper") m5.rippers.push(entry)
                 if (m.type === "5m_dipper") m5.dippers.push(entry)
-
                 if (m.type === "30m_ripper") m30.rippers.push(entry)
                 if (m.type === "30m_dipper") m30.dippers.push(entry)
-
                 if (m.type === "day_ripper") day.rippers.push(entry)
                 if (m.type === "day_dipper") day.dippers.push(entry)
-
                 if (m.commonFlag === 1) common.push(entry)
             })
-
         } catch (e: any) {
             console.error("[API Movers] Failed to fetch marketMover:", e.message)
         }
 
         // -----------------------
-        // FETCH USER PORTFOLIO FROM DB
+        // FETCH USER PORTFOLIO
         // -----------------------
         let dbPortfolio: any[] = [];
         try {
@@ -147,9 +134,9 @@ export async function GET(req: Request) {
         }
 
         // -----------------------
-        // FETCH LIVE QUOTES FOR ALL TICKERS
+        // FETCH LIVE QUOTES
         // -----------------------
-        const allTickers = Array.from(new Set([
+        const allMoverTickers = Array.from(new Set([
             ...m1.rippers, ...m1.dippers,
             ...m5.rippers, ...m5.dippers,
             ...m30.rippers, ...m30.dippers,
@@ -158,79 +145,103 @@ export async function GET(req: Request) {
         ].map(e => e.ticker)));
 
         let quotes: Record<string, any> = {};
-        if (allTickers.length > 0) {
+        if (allMoverTickers.length > 0) {
             try {
                 const { getLiveQuotes } = await import('@/lib/stock-api');
-                quotes = await getLiveQuotes(allTickers);
+                quotes = await getLiveQuotes(allMoverTickers);
             } catch (e) {
                 console.error("[API Movers] Failed to fetch live quotes:", e);
             }
         }
 
         // -----------------------
-        // FETCH WATCHLIST FROM PRISMA
+        // FETCH WATCHLIST & SECTORS
         // -----------------------
-        let watchlist: any[] = []
+        let watchlist: any[] = [];
+        let categories: any[] = [];
         try {
-            watchlist = await prisma.watchlist.findMany({
+            const dbWatchlist = await prisma.watchlist.findMany({
                 select: { ticker: true, category: true }
             });
-            // Enrich with quotes
-            const watchlistTickers = watchlist.map(w => w.ticker);
-            const watchlistQuotes = await (await import('@/lib/stock-api')).getLiveQuotes(watchlistTickers);
 
-            watchlist = watchlist.map(w => ({
+            const watchlistTickers = dbWatchlist.map(w => w.ticker);
+            const { getLiveQuotes } = await import('../../../lib/stock-api');
+            const watchlistQuotes = await getLiveQuotes(watchlistTickers);
+
+            watchlist = dbWatchlist.map(w => ({
                 ...w,
-                ...(watchlistQuotes[w.ticker] || {})
+                ...(watchlistQuotes[w.ticker] || { price: 0, changePercent: 0 })
             }));
+
+            // Sector Analysis
+            const sectorGroups: Record<string, { totalChange: number, count: number, gainers: number, losers: number }> = {};
+
+            watchlist.forEach(w => {
+                const name = w.category || 'General';
+                const change = w.changePercent || 0;
+
+                if (!sectorGroups[name]) {
+                    sectorGroups[name] = { totalChange: 0, count: 0, gainers: 0, losers: 0 };
+                }
+
+                sectorGroups[name].totalChange += change;
+                sectorGroups[name].count += 1;
+                if (change > 0) sectorGroups[name].gainers += 1;
+                else if (change < 0) sectorGroups[name].losers += 1;
+            });
+
+            categories = Object.entries(sectorGroups).map(([name, stats]) => ({
+                category: name,
+                averageChange: stats.totalChange / stats.count,
+                totalStocks: stats.count,
+                gainers: stats.gainers,
+                losers: stats.losers,
+                neutral: stats.count - stats.gainers - stats.losers,
+                strength: (stats.gainers / stats.count) * 100
+            })).sort((a, b) => b.averageChange - a.averageChange);
+
+            (global as any).lastCategories = categories;
+
         } catch (e) {
-            console.error("[API Movers] Failed to fetch watchlist:", e);
+            console.error("[API Movers] Watchlist/Sector processing failed:", e);
+            categories = (global as any).lastCategories || [];
         }
 
         return NextResponse.json({
-            m1,
-            m5,
-            m30,
-            day,
-            common,
+            movers: {
+                m1, m5, m30, day,
+                common,
+                watchlist,
+                quotes,
+                news: [],
+                engineStatus: {
+                    lastUpdate: new Date().toISOString(),
+                    isLive: true,
+                    statusText: 'Engine Live',
+                    statusColor: 'green',
+                    session: 'Active'
+                },
+                botStats: {
+                    tweetCount: 0,
+                    isActive: true
+                },
+                categories
+            },
             watchlist,
-            quotes: quotes,
-            news: [],
+            categories,
             portfolio: dbPortfolio,
-            movers: common, // Populate movers with common stocks for the CommonListsPage
-            sessions: { preMarket: [], regular: [], postMarket: [] },
-            engineStatus: {
-                lastUpdate: new Date().toISOString(),
-                isLive: true,
-                statusText: 'Engine Live',
-                statusColor: 'green',
-                latencyMs: 0,
-                session: 'Active'
-            },
-            botStats: {
-                tweetCount: 0,
-                lastTweet: null,
-                status: 'Online',
-                lastLog: '',
-                isActive: true
-            },
-            institutionalStats: {},
             debug: {
                 allowedTickersCount: allowedTickersSet.size,
-                marketMoversCount:
-                    m1.rippers.length + m1.dippers.length +
-                    m5.rippers.length + m5.dippers.length +
-                    m30.rippers.length + m30.dippers.length +
-                    day.rippers.length + day.dippers.length,
+                marketMoversCount: allMoverTickers.length,
                 timestamp: new Date().toISOString()
             }
-        })
+        });
 
     } catch (error: any) {
-        console.error('[API Movers] TOP LEVEL CRASH:', error.message)
+        console.error('[API Movers] TOP LEVEL CRASH:', error.message);
         return NextResponse.json({
             error: 'Fatal API error',
             message: error.message
-        }, { status: 500 })
+        }, { status: 500 });
     }
 }

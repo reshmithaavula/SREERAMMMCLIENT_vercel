@@ -63,7 +63,7 @@ export default function PortfolioPage() {
                         const mapped = serverData.map((h: any) => ({
                             ticker: h.ticker,
                             shares: h.shares,
-                            avgPrice: h.avgCost // API returns avgCost
+                            avgPrice: h.avgCost || h.avgPrice || 0
                         }));
                         setHoldings(mapped);
                         loaded = true;
@@ -78,18 +78,33 @@ export default function PortfolioPage() {
                 const saved = localStorage.getItem('userHoldings');
                 if (saved) {
                     try {
-                        setHoldings(JSON.parse(saved));
+                        const parsed = JSON.parse(saved);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            setHoldings(parsed);
+                            loaded = true;
+                        }
                     } catch (e) {
                         console.error("Failed to parse holdings", e);
                     }
-                } else {
-                    // Default sample data if empty
-                    setHoldings([
-                        { ticker: 'AAPL', shares: 10, avgPrice: 150.00 },
-                        { ticker: 'TSLA', shares: 5, avgPrice: 200.00 },
-                        { ticker: 'NVDA', shares: 2, avgPrice: 400.00 }
-                    ]);
                 }
+            }
+
+            // 3. Final Fallback: If still not loaded (server empty/failed AND localStorage empty), show defaults
+            if (!loaded) {
+                setHoldings([
+                    { ticker: 'NVDA', shares: 10, avgPrice: 850.00 },
+                    { ticker: 'TSLA', shares: 25, avgPrice: 195.00 },
+                    { ticker: 'AAPL', shares: 50, avgPrice: 175.00 },
+                    { ticker: 'AMD', shares: 40, avgPrice: 150.00 },
+                    { ticker: 'AMZN', shares: 20, avgPrice: 180.00 },
+                    { ticker: 'META', shares: 15, avgPrice: 310.25 },
+                    { ticker: 'NFLX', shares: 5, avgPrice: 420.00 },
+                    { ticker: 'GOOGL', shares: 18, avgPrice: 135.50 },
+                    { ticker: 'PLTR', shares: 100, avgPrice: 16.20 },
+                    { ticker: 'MSFT', shares: 12, avgPrice: 330.10 },
+                    { ticker: 'MARA', shares: 50, avgPrice: 12.50 },
+                    { ticker: 'COIN', shares: 15, avgPrice: 85.00 }
+                ]);
             }
         };
 

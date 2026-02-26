@@ -77,15 +77,15 @@ export function CategoryAnalysisTable({ categories, title = "Sector Matrix", ico
 
                             return (
                                 <tr
-                                    key={`${cat.category}-${idx}`}
+                                    key={`${cat.category || idx}-${idx}`}
                                     className="hover:bg-gray-50/50 transition-colors border-b border-[var(--border-color)]"
                                 >
                                     <td className="px-2 py-4 text-center w-[40px]">
                                         <span className="font-bold text-[var(--text-tertiary)] text-[13px]">{idx + 1}</span>
                                     </td>
                                     <td className="px-3 py-4 overflow-hidden">
-                                        <span className="font-bold text-[var(--text-primary)] text-[14px] truncate block" title={cat.category.replace(/_/g, ' ')}>
-                                            {cat.category.replace(/_/g, ' ')}
+                                        <span className="font-bold text-[var(--text-primary)] text-[14px] truncate block" title={(cat.category || 'Unknown').replace(/_/g, ' ')}>
+                                            {(cat.category || 'Unknown').replace(/_/g, ' ')}
                                         </span>
                                     </td>
                                     <td className="px-2 py-4 text-right w-[85px]">
