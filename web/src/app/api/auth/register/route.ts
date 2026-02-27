@@ -10,7 +10,7 @@ function hashPassword(password: string) {
 
 export async function POST(req: NextRequest) {
     try {
-        let { name, email, password } = await req.json();
+        let { name, email, password, isAdminRequest } = await req.json();
 
         if (email) email = email.toLowerCase().trim();
 
@@ -31,10 +31,38 @@ export async function POST(req: NextRequest) {
         }
 
         const hashedPassword = hashPassword(password);
-        const approvalToken = crypto.randomBytes(32).toString('hex');
         const displayName = name?.trim() || email.split("@")[0];
 
-        // Step 1: Create user with standard fields only (Prisma client may not yet know about new fields)
+        // Normal User Registration (Instant Approval)
+        if (!isAdminRequest) {
+            const user = await prisma.user.create({
+                data: {
+                    name: displayName,
+                    email,
+                    password: hashedPassword,
+                    role: "user",
+                },
+            });
+
+            // Set them as approved immediately
+            await prisma.$executeRaw`
+                UPDATE "User" 
+                SET status = 'approved'
+                WHERE id = ${user.id}
+            `;
+
+            return NextResponse.json(
+                {
+                    message: "Registration successful. You can now log in.",
+                    pending: false
+                },
+                { status: 201 }
+            );
+        }
+
+        // Admin Request Registration (Requires Approval Email)
+        const approvalToken = crypto.randomBytes(32).toString('hex');
+
         const user = await prisma.user.create({
             data: {
                 name: displayName,
@@ -44,14 +72,12 @@ export async function POST(req: NextRequest) {
             },
         });
 
-        // Step 2: Update the new fields via raw SQL to bypass the Prisma client cache issue
         await prisma.$executeRaw`
             UPDATE "User" 
             SET status = 'pending', "approvalToken" = ${approvalToken}
             WHERE id = ${user.id}
         `;
 
-        // Step 3: Send approval email to owner
         try {
             await sendAdminApprovalEmail({
                 id: user.id,
