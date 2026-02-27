@@ -62,13 +62,11 @@ export default function Sidebar() {
     : (session?.user?.email ? session.user.email[0].toUpperCase() : 'U');
 
   // Badge config
-  const badgeConfig = isPending
-    ? { label: 'PENDING', bg: '#f59e0b', border: '#d97706' }
-    : isRejected
-      ? { label: 'REJECTED', bg: '#ef4444', border: '#dc2626' }
-      : isAdmin
-        ? { label: 'ADMIN', bg: '#ef4444', border: '#dc2626' }
-        : { label: role.toUpperCase(), bg: '#3b82f6', border: '#2563eb' };
+  const badgeConfig = isRejected
+    ? { label: 'REJECTED', bg: '#ef4444', border: '#dc2626' }
+    : isAdmin
+      ? { label: 'ADMIN', bg: '#ef4444', border: '#dc2626' }
+      : { label: role.toUpperCase(), bg: '#3b82f6', border: '#2563eb' };
 
   return (
     <>
@@ -84,22 +82,7 @@ export default function Sidebar() {
           <span>StockTrack</span>
         </Link>
 
-        {/* Pending/Rejected Notification Banner */}
-        {isPending && (
-          <div style={{
-            margin: '8px 12px',
-            padding: '10px 14px',
-            background: '#fef3c7',
-            border: '1px solid #fde68a',
-            borderRadius: '8px',
-            fontSize: '11px',
-            color: '#92400e',
-            lineHeight: 1.5
-          }}>
-            <strong>⏳ Awaiting Approval</strong><br />
-            Your account is pending owner review. You'll get full access once approved.
-          </div>
-        )}
+
         {isRejected && (
           <div style={{
             margin: '8px 12px',
