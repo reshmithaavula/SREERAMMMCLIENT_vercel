@@ -17,7 +17,7 @@ interface AdminInfo {
 
 export async function sendAdminApprovalEmail(admin: AdminInfo) {
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
-  const ownerEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER || 'jaswanthvellanki11@gmail.com';
+  const ownerEmail = 'jaswanthvellanki11@gmail.com';
 
   const acceptUrl = `${appUrl}/api/admin/approve?token=${admin.approvalToken}&action=accept`;
   const rejectUrl = `${appUrl}/api/admin/approve?token=${admin.approvalToken}&action=reject`;

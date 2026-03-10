@@ -41,8 +41,7 @@ export default function RegisterPage() {
                 body: JSON.stringify({
                     name: name.trim() || email.split('@')[0],
                     email: email.toLowerCase().trim(),
-                    password,
-                    isAdminRequest: true
+                    password
                 }),
             });
 

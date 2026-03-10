@@ -4,5 +4,5 @@ export default withAuth;
 
 export const config = {
     // Protect everything except these paths
-    matcher: ["/((?!api/admin/approve|api/auth|api/movers|api/momentum|api/penny-stocks|api/overnight-analysis|api/header-data|login|admin-login|register|_next/static|_next/image|favicon.ico|$).*)"],
+    matcher: ["/((?!api/auth|api/movers|api/momentum|api/penny-stocks|api/overnight-analysis|api/header-data|login|admin-login|register|_next/static|_next/image|favicon.ico).*)"],
 };

@@ -133,8 +133,8 @@ const MoverBox = ({ title, items, color }: { title: string, items: any[], color:
             {items.length > 0 ? (
                 <Table columns={miniColumns} data={items} minWidth="150px" />
             ) : (
-                <div className="flex flex-col items-center justify-center h-full text-[var(--text-tertiary)] italic text-[9px] opacity-40 uppercase tracking-widest gap-2">
-                    <span>-- Scanning --</span>
+                <div className="flex items-center justify-center h-full text-[var(--text-tertiary)] italic text-[9px] opacity-40 uppercase tracking-widests">
+                    -- Scanning --
                 </div>
             )}
         </div>
@@ -259,14 +259,7 @@ export default function WatchlistPage() {
                 <div className="flex-1 flex flex-col gap-4 min-h-0">
                     <div className="flex flex-col gap-1 px-1 shrink-0">
                         <span className="text-[11px] font-bold text-[var(--text-primary)] uppercase tracking-wider">Momentum Matrix</span>
-                        <div className="flex justify-between items-center">
-                            <span className="text-[10px] text-[var(--text-primary)] font-bold uppercase tracking-widest">Real-time Scanner</span>
-                            {movers?.debug?.dbError && (
-                                <span className="text-[10px] text-[var(--accent-red)] font-bold animate-pulse">
-                                    DB ERROR: {movers.debug.dbError}
-                                </span>
-                            )}
-                        </div>
+                        <span className="text-[10px] text-[var(--text-primary)] font-bold uppercase tracking-widest">Real-time Scanner</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 overflow-y-auto pb-2 flex-1 custom-scrollbar pr-1">
                         {/* Common Movers (Golden) */}

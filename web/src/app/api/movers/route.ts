@@ -113,8 +113,6 @@ export async function GET(req: Request) {
             })
         } catch (e: any) {
             console.error("[API Movers] Failed to fetch marketMover:", e.message)
-                // Add to a debug field later if needed
-                (global as any).lastDbError = e.message;
         }
 
         // -----------------------
@@ -256,8 +254,7 @@ export async function GET(req: Request) {
             debug: {
                 allowedTickersCount: allowedTickersSet.size,
                 marketMoversCount: allMoverTickers.length,
-                timestamp: new Date().toISOString(),
-                dbError: (global as any).lastDbError || null
+                timestamp: new Date().toISOString()
             }
         });
 
