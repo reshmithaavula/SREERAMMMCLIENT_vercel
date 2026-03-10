@@ -43,30 +43,34 @@ export async function updateMarketMovers() {
 
             if (res.status === 403) {
                 console.warn(`[Market Service] Snapshot API 403. Falling back to individual quotes for batch ${i / batchSize + 1}...`);
-                // Fallback: Fetch one by one (respecting 5 calls/min for free tier if needed, 
-                // but we'll try to burst first as some 'free' keys have higher burst limits)
                 for (const ticker of batch) {
                     try {
-                        const tradeUrl = `${BASE_URL}/v2/last/trade/${ticker}?apiKey=${POLYGON_API_KEY}`;
-                        const tradeRes = await fetch(tradeUrl);
-                        if (tradeRes.ok) {
-                            const tradeData = await tradeRes.json();
-                            if (tradeData.results) {
+                        // Using 'Previous Close' endpoint as it's the most widely available on free/starter plans
+                        const prevUrl = `${BASE_URL}/v2/aggs/ticker/${ticker}/prev?adjusted=true&apiKey=${POLYGON_API_KEY}`;
+                        const prevRes = await fetch(prevUrl);
+
+                        if (prevRes.ok) {
+                            const prevData = await prevRes.json();
+                            if (prevData.results && prevData.results.length > 0) {
+                                const r = prevData.results[0];
                                 allTickersData.push({
                                     ticker: ticker,
-                                    lastTrade: { p: tradeData.results.p, t: tradeData.results.t },
-                                    todaysChangePerc: 0, // Individual trade doesn't give daily change easily
-                                    day: { o: 0 }
+                                    lastTrade: { p: r.c, t: r.t },
+                                    todaysChangePerc: 0,
+                                    day: { o: r.o },
+                                    prevDay: { c: r.c }
                                 });
                             }
+                        } else {
+                            console.warn(`[Market Service] Fallback failed for ${ticker} - Status: ${prevRes.status}`);
                         }
-                        // Small delay to help with rate limits if we hit them
-                        if (tradeRes.status === 429) {
+
+                        if (prevRes.status === 429) {
                             console.warn('[Market Service] Rate limit hit during fallback. Waiting 60s...');
                             await new Promise(resolve => setTimeout(resolve, 60000));
                         }
                     } catch (e) {
-                        console.error(`[Market Service] Fallback fetch failed for ${ticker}:`, e);
+                        console.error(`[Market Service] Fallback error for ${ticker}:`, e);
                     }
                 }
                 continue;
