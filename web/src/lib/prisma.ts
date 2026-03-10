@@ -4,6 +4,8 @@ const globalForPrisma = global as unknown as {
     prisma: PrismaClient | undefined
 }
 
+console.log(">>> [DATABASE] Prisma library initializing...");
+
 export const prisma =
     globalForPrisma.prisma ??
     new PrismaClient({
