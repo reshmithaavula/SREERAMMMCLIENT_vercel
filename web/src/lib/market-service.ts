@@ -40,6 +40,38 @@ export async function updateMarketMovers() {
             const batch = tickers.slice(i, i + batchSize);
             const url = `${BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=${batch.join(',')}&apiKey=${POLYGON_API_KEY}`;
             const res = await fetch(url);
+
+            if (res.status === 403) {
+                console.warn(`[Market Service] Snapshot API 403. Falling back to individual quotes for batch ${i / batchSize + 1}...`);
+                // Fallback: Fetch one by one (respecting 5 calls/min for free tier if needed, 
+                // but we'll try to burst first as some 'free' keys have higher burst limits)
+                for (const ticker of batch) {
+                    try {
+                        const tradeUrl = `${BASE_URL}/v2/last/trade/${ticker}?apiKey=${POLYGON_API_KEY}`;
+                        const tradeRes = await fetch(tradeUrl);
+                        if (tradeRes.ok) {
+                            const tradeData = await tradeRes.json();
+                            if (tradeData.results) {
+                                allTickersData.push({
+                                    ticker: ticker,
+                                    lastTrade: { p: tradeData.results.p, t: tradeData.results.t },
+                                    todaysChangePerc: 0, // Individual trade doesn't give daily change easily
+                                    day: { o: 0 }
+                                });
+                            }
+                        }
+                        // Small delay to help with rate limits if we hit them
+                        if (tradeRes.status === 429) {
+                            console.warn('[Market Service] Rate limit hit during fallback. Waiting 60s...');
+                            await new Promise(resolve => setTimeout(resolve, 60000));
+                        }
+                    } catch (e) {
+                        console.error(`[Market Service] Fallback fetch failed for ${ticker}:`, e);
+                    }
+                }
+                continue;
+            }
+
             if (!res.ok) {
                 const errData = await res.json().catch(() => ({}));
                 console.error(`[Market Service] Batch fetch failed: ${res.status} - ${errData.error || errData.message || 'Unknown'}`);

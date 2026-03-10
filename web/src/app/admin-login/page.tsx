@@ -23,8 +23,9 @@ export default function AdminLoginPage() {
         try {
             const result = await signIn('credentials', {
                 redirect: false,
-                email,
+                email: email.toLowerCase().trim(),
                 password,
+                role: 'admin'
             });
 
             if (result?.error) {

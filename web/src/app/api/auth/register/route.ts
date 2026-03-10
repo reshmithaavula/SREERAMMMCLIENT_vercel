@@ -10,7 +10,10 @@ function hashPassword(password: string) {
 
 export async function POST(req: NextRequest) {
     try {
-        let { name, email, password } = await req.json();
+        let { name, email, password, role } = await req.json();
+
+        // Default to user if not provided
+        if (!role) role = "user";
 
         if (email) email = email.toLowerCase().trim();
 
@@ -40,34 +43,39 @@ export async function POST(req: NextRequest) {
                 name: displayName,
                 email,
                 password: hashedPassword,
-                role: "user",
+                role: role,
+                status: role === "admin" ? "pending" : "approved"
             },
         });
 
-        // Step 2: Update the new fields via raw SQL to bypass the Prisma client cache issue
-        await prisma.$executeRaw`
-            UPDATE "User" 
-            SET status = 'pending', "approvalToken" = ${approvalToken}
-            WHERE id = ${user.id}
-        `;
+        // Step 2: Send approval email ONLY for admins
+        if (role === 'admin') {
+            await prisma.$executeRaw`
+                UPDATE "User" 
+                SET "approvalToken" = ${approvalToken}
+                WHERE id = ${user.id}
+            `;
 
-        // Step 3: Send approval email to owner
-        try {
-            await sendAdminApprovalEmail({
-                id: user.id,
-                name: displayName,
-                email,
-                approvalToken,
-            });
-            console.log(`[REGISTER] Approval email sent for ${email}`);
-        } catch (mailErr) {
-            console.error("[REGISTER] Failed to send approval email:", mailErr);
+            // Step 3: Send approval email to owner
+            try {
+                await sendAdminApprovalEmail({
+                    id: user.id,
+                    name: displayName,
+                    email,
+                    approvalToken,
+                });
+                console.log(`[REGISTER] Approval email sent for ${email}`);
+            } catch (mailErr) {
+                console.error("[REGISTER] Failed to send approval email:", mailErr);
+            }
+
+            );
         }
 
         return NextResponse.json(
             {
-                message: "Registration successful. Awaiting admin approval.",
-                pending: true
+                message: "Registration successful. You can now login.",
+                pending: false
             },
             { status: 201 }
         );
