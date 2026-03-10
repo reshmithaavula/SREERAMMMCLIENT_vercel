@@ -114,43 +114,45 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
         };
         const currentSession = getSession();
 
-        // Match and update each ticker
-        for (const t of allTickersData) {
-            const price = t.lastTrade?.p || t.min?.c || t.prevDay?.c || 0;
-            const prevClose = t.prevDay?.c || 0;
-            let changePercent = t.todaysChangePerc || 0;
+        // Match and update each ticker in a single transaction
+        await prisma.$transaction(async (tx) => {
+            for (const t of allTickersData) {
+                const price = t.lastTrade?.p || t.min?.c || t.prevDay?.c || 0;
+                const prevClose = t.prevDay?.c || 0;
+                let changePercent = t.todaysChangePerc || 0;
 
-            if (prevClose > 0) {
-                changePercent = ((price - prevClose) / prevClose) * 100;
+                if (prevClose > 0) {
+                    changePercent = ((price - prevClose) / prevClose) * 100;
+                }
+
+                const mover = {
+                    ticker: t.ticker,
+                    price: price,
+                    changePercent: changePercent,
+                    dayOpen: t.day?.o || t.lastTrade?.p || 0,
+                    prevClose: prevClose,
+                    type: changePercent >= 0 ? 'day_ripper' : 'day_dipper',
+                    session: currentSession,
+                    updatedAt: now,
+                    common_flag: 0,
+                    commonFlag: 0
+                };
+
+                try {
+                    // Delete any existing record for this ticker first.
+                    await tx.marketMover.deleteMany({
+                        where: { ticker: mover.ticker }
+                    });
+
+                    // Create the new mover record.
+                    await tx.marketMover.create({
+                        data: mover
+                    });
+                } catch (upsertErr: any) {
+                    console.error(`[Market Service] Transaction step failed for ${mover.ticker}:`, upsertErr.message);
+                }
             }
-
-            const mover = {
-                ticker: t.ticker,
-                price: price,
-                changePercent: changePercent,
-                dayOpen: t.day?.o || t.lastTrade?.p || 0,
-                prevClose: prevClose,
-                type: changePercent >= 0 ? 'day_ripper' : 'day_dipper',
-                session: currentSession,
-                updatedAt: now,
-                common_flag: 0,
-                commonFlag: 0
-            };
-
-            try {
-                // To avoid having both ripper and dipper for one ticker:
-                // Delete any existing record for this ticker first.
-                await prisma.marketMover.deleteMany({
-                    where: { ticker: mover.ticker }
-                });
-
-                await prisma.marketMover.create({
-                    data: mover
-                });
-            } catch (upsertErr: any) {
-                console.error(`[Market Service] Sync failed for ${mover.ticker}:`, upsertErr.message);
-            }
-        }
+        });
 
         return {
             success: true,

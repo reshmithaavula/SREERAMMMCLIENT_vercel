@@ -16,7 +16,5 @@ if (process.env.NODE_ENV !== "production") {
     globalForPrisma.prisma = prisma
 }
 
-// Ensure DB connection log
-prisma.$connect()
-    .then(() => console.log(">>> [DATABASE] db is connected"))
-    .catch((err) => console.error(">>> [DATABASE] Connection failed:", err));
+// Exporting the PrismaClient instance
+export default prisma;
