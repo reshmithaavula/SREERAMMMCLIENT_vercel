@@ -68,7 +68,12 @@ export async function POST(req: NextRequest) {
             } catch (mailErr) {
                 console.error("[REGISTER] Failed to send approval email:", mailErr);
             }
-
+            return NextResponse.json(
+                {
+                    message: "Registration successful. Awaiting admin approval.",
+                    pending: true
+                },
+                { status: 201 }
             );
         }
 
