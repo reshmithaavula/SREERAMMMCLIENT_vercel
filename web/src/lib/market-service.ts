@@ -11,7 +11,7 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
 
     try {
         const watchlist = await prisma.watchlist.findMany({ select: { ticker: true } });
-        let tickers = watchlist.map(w => w.ticker.toUpperCase());
+        let tickers = watchlist.map(w => w.ticker.toUpperCase().trim()).filter(t => t.length > 0);
 
         try {
             const fs = await import('fs');
@@ -19,7 +19,7 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
             const pennyPath = path.join(process.cwd(), '../Watchlist_Penny.csv');
             if (fs.existsSync(pennyPath)) {
                 const content = fs.readFileSync(pennyPath, 'utf-8');
-                const lines = content.split('\n').slice(1);
+                const lines = content.split('\n').filter(l => l.trim().length > 0).slice(1);
                 lines.forEach(line => {
                     const t = line.split(',')[1]?.trim().toUpperCase();
                     if (t && !tickers.includes(t)) tickers.push(t);
@@ -88,7 +88,11 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
             }
         } else if (res.ok) {
             const data = await res.json();
-            if (data.tickers) allTickersData.push(...data.tickers);
+            if (data.tickers && data.tickers.length > 0) {
+                allTickersData.push(...data.tickers);
+            } else {
+                console.warn(`[Market Service] Snapshot returned 200 OK but 0 tickers. URL: ${url.replace(POLYGON_API_KEY as string, 'HIDDEN')}`);
+            }
         }
 
         if (allTickersData.length === 0) {
