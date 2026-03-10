@@ -93,6 +93,8 @@ model MarketMover {
   common_flag    Int?     @default(0)
   dayOpen       Float?
   prevClose     Float?
+
+  @@unique([ticker, type])
 }
 
 model News {
