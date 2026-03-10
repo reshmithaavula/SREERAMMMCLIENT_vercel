@@ -76,30 +76,12 @@ async function fetchLiveQuotesInternal(tickers: string[]): Promise<Record<string
         const tickersToFetch = stockTickers.filter(t => !results[t]);
         const promises = [];
 
-        // --- 2. FETCH CRYPTO (Parallel) ---
+        // --- 2. FETCH CRYPTO (DISABLED - Use /api/sync) ---
+        /*
+           Crypto fetching is also disabled to preserve the 5-calls/min quota.
+        */
         if (cryptoTickers.length > 0) {
-            promises.push(Promise.allSettled(cryptoTickers.map(async (t) => {
-                try {
-                    const [base, quote] = t.split('-');
-                    const lastTradeUrl = `${BASE_URL}/v1/last/crypto/${base}/${quote}?apiKey=${POLYGON_API_KEY}`;
-                    const res = await fetchWithTimeout(lastTradeUrl, 5000);
-
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.last) {
-                            results[t] = {
-                                ticker: t,
-                                price: data.last.price,
-                                change: 0,
-                                changePercent: 0,
-                                lastUpdated: data.last.timestamp || Date.now()
-                            };
-                        }
-                    }
-                } catch (e) {
-                    console.warn(`Error fetching crypto ${t}`);
-                }
-            })));
+            tickersToFetch.push(...cryptoTickers);
         }
 
         // --- 3. FETCH STOCKS (DISABLED - Use /api/sync) ---
