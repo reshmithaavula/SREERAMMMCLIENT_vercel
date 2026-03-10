@@ -55,7 +55,14 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
             for (const ticker of pendingTickers) {
                 try {
                     const prevUrl = `${BASE_URL}/v2/aggs/ticker/${ticker}/prev?adjusted=true&apiKey=${POLYGON_API_KEY}`;
+                    console.log(`[Market Service] Fallback fetching: ${ticker}`);
                     const prevRes = await fetch(prevUrl);
+
+                    if (prevRes.status === 429) {
+                        console.warn(`[Market Service] Rate limit (429) hit at ${ticker}. Stopping batch.`);
+                        break;
+                    }
+
                     if (prevRes.ok) {
                         const prevData = await prevRes.json();
                         if (prevData.results && prevData.results.length > 0) {
@@ -67,10 +74,17 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
                                 day: { o: r.o },
                                 prevDay: { c: r.c }
                             });
+                            console.log(`[Market Service] Fallback success: ${ticker} @ ${r.c}`);
+                        } else {
+                            console.warn(`[Market Service] No results in fallback for ${ticker}`);
                         }
+                    } else {
+                        const errText = await prevRes.text().catch(() => 'No body');
+                        console.warn(`[Market Service] Fallback failed for ${ticker}: ${prevRes.status} - ${errText}`);
                     }
-                    if (prevRes.status === 429) break; // Stop if rate limited
-                } catch (e) { console.error(`Fallback error for ${ticker}:`, e); }
+                } catch (e: any) {
+                    console.error(`[Market Service] Fallback exception for ${ticker}:`, e.message);
+                }
             }
         } else if (res.ok) {
             const data = await res.json();
@@ -108,11 +122,15 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
 
         // Upsert the batch instead of deleting all
         for (const mover of allMovers) {
-            await prisma.marketMover.upsert({
-                where: { ticker_type: { ticker: mover.ticker, type: mover.type } },
-                update: mover,
-                create: mover
-            });
+            try {
+                await prisma.marketMover.upsert({
+                    where: { ticker_type: { ticker: mover.ticker, type: mover.type } },
+                    update: mover,
+                    create: mover
+                });
+            } catch (upsertErr: any) {
+                console.error(`[Market Service] Upsert failed for ${mover.ticker}:`, upsertErr.message);
+            }
         }
 
         return {

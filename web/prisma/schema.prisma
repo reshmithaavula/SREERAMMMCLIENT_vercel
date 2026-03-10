@@ -94,7 +94,7 @@ model MarketMover {
   dayOpen       Float?
   prevClose     Float?
 
-  @@unique([ticker, type])
+  @@unique([ticker, type], name: "ticker_type")
 }
 
 model News {
