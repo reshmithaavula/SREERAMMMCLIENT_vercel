@@ -101,6 +101,14 @@ export async function GET(req: Request) {
                     prevClose: m.prevClose || 0
                 }
 
+                // Track update freshness
+                if (m.updatedAt) {
+                    const ts = new Date(m.updatedAt).getTime();
+                    if (!(global as any).lastMoverUpdate || ts > new Date((global as any).lastMoverUpdate).getTime()) {
+                        (global as any).lastMoverUpdate = m.updatedAt;
+                    }
+                }
+
                 if (m.type === "1m_ripper") m1.rippers.push(entry)
                 if (m.type === "1m_dipper") m1.dippers.push(entry)
                 if (m.type === "5m_ripper") m5.rippers.push(entry)
@@ -229,10 +237,10 @@ export async function GET(req: Request) {
                 quotes,
                 news: [],
                 engineStatus: {
-                    lastUpdate: new Date().toISOString(),
-                    isLive: true,
-                    statusText: 'Engine Live',
-                    statusColor: 'green',
+                    lastUpdate: (global as any).lastMoverUpdate || new Date().toISOString(),
+                    isLive: (global as any).lastMoverUpdate ? (Date.now() - new Date((global as any).lastMoverUpdate).getTime() < 900000) : false,
+                    statusText: (global as any).lastMoverUpdate ? (Date.now() - new Date((global as any).lastMoverUpdate).getTime() < 900000 ? 'Engine Live' : 'Engine Stale') : 'Engine Offline',
+                    statusColor: (global as any).lastMoverUpdate ? (Date.now() - new Date((global as any).lastMoverUpdate).getTime() < 900000 ? 'green' : 'yellow') : 'red',
                     session: 'Active'
                 },
                 botStats: {

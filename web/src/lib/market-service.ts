@@ -40,7 +40,11 @@ export async function updateMarketMovers() {
             const batch = tickers.slice(i, i + batchSize);
             const url = `${BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=${batch.join(',')}&apiKey=${POLYGON_API_KEY}`;
             const res = await fetch(url);
-            if (!res.ok) continue;
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                console.error(`[Market Service] Batch fetch failed: ${res.status} - ${errData.error || errData.message || 'Unknown'}`);
+                continue;
+            }
             const data = await res.json();
             if (data.tickers) allTickersData.push(...data.tickers);
         }
@@ -117,6 +121,11 @@ export async function updateMarketMovers() {
                 m.commonFlag = 1;
             }
         });
+
+        if (allTickersData.length === 0) {
+            console.error(`[Market Service] Failed to fetch any ticker data from Polygon. Check API Key or Batch URL.`);
+            return;
+        }
 
         console.log(`[Market Service] Prepared ${allMovers.length} signals. Saving to DB...`);
 
