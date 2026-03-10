@@ -1,0 +1,4 @@
+--- Current Users ---
+ID: cmm2ega4f0000i4gog8kn6ijq | Name: StockTrack Admin | Email: admin@stocktrack.com | Role: owner
+ID: cmm2g79lo0006i4qgir31mqew | Name: jaswanth | Email: jashu@stack.com | Role: user
+ID: cmm2g86at0007i4qg7o3scl14 | Name: reshmitha | Email: reshu@stack.com | Role: user
