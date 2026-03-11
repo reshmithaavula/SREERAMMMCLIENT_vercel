@@ -154,12 +154,18 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
         await prisma.$transaction(async (tx) => {
             for (const t of allTickersData) {
                 if (t.isHeartbeat) {
-                    // Just touch the updatedAt for tickers we couldn't fetch
-                    await tx.marketMover.updateMany({
-                        where: { ticker: t.ticker },
-                        data: { updatedAt: now }
+                    // Only touch updatedAt if they already have a valid price.
+                    // If price is 0, we WANT them to stay "stale" so they are retried immediately.
+                    const current = await tx.marketMover.findFirst({
+                        where: { ticker: t.ticker, price: { gt: 0 } }
                     });
-                    // DO NOT create 0-price records if they don't exist
+                    
+                    if (current) {
+                        await tx.marketMover.updateMany({
+                            where: { ticker: t.ticker },
+                            data: { updatedAt: now }
+                        });
+                    }
                     continue;
                 }
 

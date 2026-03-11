@@ -62,16 +62,19 @@ async function fetchLiveQuotesInternal(tickers: string[]): Promise<Record<string
             });
 
             dbMovers.forEach(m => {
-                results[m.ticker] = {
-                    ticker: m.ticker,
-                    price: m.price || 0,
-                    change: m.changePercent || 0,
-                    changePercent: m.changePercent || 0,
-                    prevClose: m.prevClose || 0,
-                    lastUpdated: m.updatedAt.getTime()
-                };
+                if ((m.price || 0) > 0) {
+                    results[m.ticker] = {
+                        ticker: m.ticker,
+                        price: m.price || 0,
+                        change: m.changePercent || 0,
+                        changePercent: m.changePercent || 0,
+                        prevClose: m.prevClose || 0,
+                        lastUpdated: m.updatedAt.getTime()
+                    };
+                }
             });
-            console.log(`[Stock API] DB found ${dbMovers.length}/${tickers.length} tickers.`);
+            const validHits = Object.keys(results).length;
+            console.log(`[Stock API] DB found ${validHits}/${stockTickers.length} tickers with valid prices.`);
         }
 
         const tickersToFetch = stockTickers.filter(t => !results[t]);
