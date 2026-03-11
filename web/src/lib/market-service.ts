@@ -249,8 +249,16 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                         ticker: ticker,
                         isHeartbeat: true
                     });
+                } else {
+                    // Initialize empty record to prevent infinite loop of "stale" un-synced tickers
+                    allTickersData.push({
+                        ticker: ticker,
+                        price: 0.0001, // Store a tiny fraction so it counts as initialized
+                        changePerc: 0,
+                        prevClose: 0,
+                        dayOpen: 0
+                    });
                 }
-                // If price is 0 AND it doesn't exist, we skip it entirely to avoid Prisma errors.
             } catch (e: any) {
                 console.error(`[Market Service] Exception for ${ticker}:`, e.message);
             }
@@ -290,10 +298,10 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
 
                 const mover = {
                     ticker: t.ticker,
-                    price: t.price,
-                    changePercent: t.changePerc,
-                    dayOpen: t.dayOpen,
-                    prevClose: t.prevClose,
+                    price: t.price || 0.0001,
+                    changePercent: t.changePerc || 0,
+                    dayOpen: t.dayOpen || 0,
+                    prevClose: t.prevClose || 0,
                     type: isCommon 
                         ? (t.changePerc >= 0 ? 'day_ripper' : 'day_dipper')
                         : (t.changePerc > 0 ? 'day_ripper' : (t.changePerc < 0 ? 'day_dipper' : 'neutral')),
