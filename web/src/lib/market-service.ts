@@ -153,9 +153,9 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
             where: { 
                 ticker: { in: tickers },
                 updatedAt: { gt: windowAgo },
-                price: { gt: 0 },
-                dayOpen: { gt: 0 },
-                prevClose: { gt: 0 }
+                price: { gt: 0.001 },      // Exclude 0.0001 placeholders
+                dayOpen: { gt: 0.001 },    // Exclude 0.0001 placeholders
+                prevClose: { gt: 0.001 }   // Exclude 0.0001 placeholders
             },
             select: { ticker: true }
         });
