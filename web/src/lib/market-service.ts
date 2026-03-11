@@ -20,7 +20,8 @@ async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercen
         const priceMatch = html.match(/"price"\s*:\s*"([^"]+)"/);
         const changePctMatch = html.match(/"priceChangePercent"\s*:\s*"([^"]+)"/);
         const openMatch = html.match(/"open"\s*:\s*"([^"]+)"/);
-        const prevCloseMatch = html.match(/"previous_close"\s*:\s*"([^"]+)"/);
+        // Look for closePrice OR previous_close
+        const prevCloseMatch = html.match(/"(?:previous_close|closePrice)"\s*:\s*"?([^",}]+)"?/);
         
         const price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 0;
         const changePct = changePctMatch ? parseFloat(changePctMatch[1].replace(/,/g, '')) : 0;
@@ -141,9 +142,10 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                 }
 
                 // --- CNBC FALLBACK (RESILIENCY UPGRADE) ---
+                let cnbcData: any = null;
                 if (lastPrice === 0 || tradeRes?.status === 403 || tradeRes?.status === 429) {
                     console.log(`[Market Service] Polygon failed/limited for ${ticker}. Trying CNBC...`);
-                    const cnbcData = await scrapeCNBC(ticker);
+                    cnbcData = await scrapeCNBC(ticker);
                     if (cnbcData.price > 0) {
                         lastPrice = cnbcData.price;
                         if (cnbcData.prevClose > 0) prevClose = cnbcData.prevClose;
@@ -164,7 +166,8 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                     
                     // Priority for dayOpen: CNBC exact > prevClose (from Polygon/CNBC) > lastPrice
                     let dayOpen = lastPrice;
-                    if (prevClose > 0) dayOpen = prevClose; // Default to prevClose for dayOpen if missing
+                    if (cnbcData?.open > 0) dayOpen = cnbcData.open;
+                    else if (prevClose > 0) dayOpen = prevClose;
                     
                     allTickersData.push({
                         ticker: ticker,

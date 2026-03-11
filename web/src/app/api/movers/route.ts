@@ -97,7 +97,7 @@ export async function GET(req: Request) {
                     changePercent: m.changePercent || 0,
                     session: m.session || "Closed",
                     commonFlag: m.commonFlag || 0,
-                    openPrice: m.dayOpen || m.price || 0,
+                    openPrice: m.dayOpen || m.prevClose || m.price || 0, // Better fallback
                     prevClose: m.prevClose || 0
                 }
 
@@ -202,7 +202,7 @@ export async function GET(req: Request) {
                         ticker: w.ticker,
                         price: quote.price || dbMover?.price || 0,
                         changePercent: quote.changePercent || dbMover?.changePercent || 0,
-                        openPrice: dbMover?.dayOpen || 0,
+                        openPrice: dbMover?.dayOpen || dbMover?.prevClose || quote.price || dbMover?.price || 0,
                         prevClose: dbMover?.prevClose || 0
                     };
                 });
