@@ -11,6 +11,9 @@ export async function GET() {
             POLYGON_API_KEY: process.env.POLYGON_API_KEY ? 'SET (Hidden for security)' : 'NOT SET',
             NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'NOT SET',
             NODE_ENV: process.env.NODE_ENV,
+            EMAIL_USER: process.env.EMAIL_USER ? 'SET' : 'NOT SET',
+            EMAIL_PASS: process.env.EMAIL_PASS ? 'SET (Hidden)' : 'NOT SET',
+            APP_URL: process.env.APP_URL || 'NOT SET',
         },
         database: {
             connected: false,
