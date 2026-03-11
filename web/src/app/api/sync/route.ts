@@ -9,7 +9,7 @@ export async function GET(req: Request) {
         const force = searchParams.get('force') === 'true';
         
         console.log(`[API Sync] Manual sync triggered${force ? ' (FORCED)' : ''}`);
-        const result = await updateMarketMovers(2, force); // Process 2 at a time
+        const result = await updateMarketMovers(20, force); // Process 20 at a time
         return NextResponse.json(result);
     } catch (error: any) {
         console.error('[API Sync] Sync failed:', error.message);

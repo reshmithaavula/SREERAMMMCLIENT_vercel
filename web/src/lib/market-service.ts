@@ -21,14 +21,23 @@ async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercen
         if (nextDataMatch) {
             try {
                 const data = JSON.parse(nextDataMatch[1]);
-                // Navigate to quote data: props.pageProps.quoteData
-                const quote = data.props?.pageProps?.quoteData;
+                const quote = data.props?.pageProps?.quoteData || data.props?.pageProps?.initialQuoteData;
                 if (quote) {
+                    let p = parseFloat(quote.last) || 0;
+                    let cp = parseFloat(quote.change_pct) || 0;
+                    let o = parseFloat(quote.open) || 0;
+                    let pc = parseFloat(quote.previous_close) || 0;
+
+                    // Backwards Math Fallback
+                    if (pc === 0 && Math.abs(cp) > 0.0001 && p > 0) {
+                        pc = p / (1 + (cp / 100));
+                    }
+
                     return {
-                        price: parseFloat(quote.last) || 0,
-                        changePercent: parseFloat(quote.change_pct) || 0,
-                        open: parseFloat(quote.open) || 0,
-                        prevClose: parseFloat(quote.previous_close) || 0
+                        price: p,
+                        changePercent: cp,
+                        open: o,
+                        prevClose: pc
                     };
                 }
             } catch (e) {}
@@ -38,8 +47,12 @@ async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercen
         const price = parseFloat(html.match(/"price"\s*:\s*"([^"]+)"/)?.[1]?.replace(/,/g, '') || "0");
         const changePct = parseFloat(html.match(/"priceChangePercent"\s*:\s*"([^"]+)"/)?.[1]?.replace(/,/g, '') || "0");
         const open = parseFloat(html.match(/"open"\s*:\s*"([^"]+)"/)?.[1]?.replace(/,/g, '') || "0");
-        const prevClose = parseFloat(html.match(/"previous_close"\s*:\s*"([^"]+)"/)?.[1]?.replace(/,/g, '') || html.match(/"closePrice"\s*:\s*"?([^",}]+)"?/)?.[1]?.replace(/,/g, '') || "0");
+        let prevClose = parseFloat(html.match(/"previous_close"\s*:\s*"([^"]+)"/)?.[1]?.replace(/,/g, '') || html.match(/"closePrice"\s*:\s*"?([^",}]+)"?/)?.[1]?.replace(/,/g, '') || "0");
         
+        if (prevClose === 0 && Math.abs(changePct) > 0.0001 && price > 0) {
+            prevClose = price / (1 + (changePct / 100));
+        }
+
         return { price, changePercent: changePct, open: open !== 0 ? open : 0, prevClose };
     } catch (e) {
         return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
@@ -188,7 +201,11 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                     if (finalPrevClose === 0 && (existing?.prevClose || 0) > 0) {
                         finalPrevClose = existing!.prevClose!;
                     } else if (finalPrevClose === 0) {
-                        finalPrevClose = lastPrice;
+                        if (Math.abs(changePerc) > 0.0001 && lastPrice > 0) {
+                            finalPrevClose = lastPrice / (1 + (changePerc / 100));
+                        } else {
+                            finalPrevClose = lastPrice;
+                        }
                     }
 
                     let finalDayOpen = dayOpen;
