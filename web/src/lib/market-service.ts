@@ -59,6 +59,33 @@ async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercen
     }
 }
 
+// Yahoo Finance v8 Chart API - works for ETFs, OTC, and delisted stocks that CNBC misses
+async function scrapeYahoo(ticker: string): Promise<{ price: number, changePercent: number, open: number, prevClose: number }> {
+    try {
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
+        const res = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            },
+            next: { revalidate: 60 }
+        });
+        if (!res.ok) return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
+        const data = await res.json() as any;
+        const meta = data?.chart?.result?.[0]?.meta;
+        if (!meta || !meta.regularMarketPrice) return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
+
+        const price = meta.regularMarketPrice || 0;
+        const prevClose = meta.chartPreviousClose || meta.previousClose || 0;
+        const open = meta.regularMarketOpen || prevClose;
+        const changePercent = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
+
+        return { price, changePercent, open, prevClose };
+    } catch (e) {
+        return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
+    }
+}
+
 export async function updateMarketMovers(maxToProcess: number = 20, force: boolean = false) {
     if (!POLYGON_API_KEY) {
         console.error('[Market Service] No API_KEY found');
@@ -220,6 +247,23 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                         console.log(`[Market Service] CNBC Rescue for ${ticker}: $${lastPrice} (Prev: ${prevClose})`);
                     }
                 }
+
+                // --- YAHOO FINANCE FALLBACK (for ETFs, OTC, and obscure tickers CNBC misses) ---
+                if (lastPrice === 0) {
+                    console.log(`[Market Service] CNBC also failed for ${ticker}. Trying Yahoo Finance...`);
+                    const yahooData = await scrapeYahoo(ticker);
+                    if (yahooData.price > 0) {
+                        lastPrice = yahooData.price;
+                        if (yahooData.prevClose > 0) prevClose = yahooData.prevClose;
+                        if (!cnbcData) cnbcData = { open: yahooData.open, changePercent: yahooData.changePercent, prevClose: yahooData.prevClose };
+                        else {
+                            cnbcData.open = cnbcData.open || yahooData.open;
+                            cnbcData.changePercent = cnbcData.changePercent || yahooData.changePercent;
+                        }
+                        console.log(`[Market Service] Yahoo Rescue for ${ticker}: $${lastPrice} (Prev: ${prevClose})`);
+                    }
+                }
+
 
                 if (tradeRes?.status === 429 && lastPrice === 0) {
                     console.warn(`[Market Service] Pure Rate limit (429) hit. Stopping batch.`);
