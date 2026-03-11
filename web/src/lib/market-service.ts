@@ -46,68 +46,52 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
 
         const allTickersData: any[] = [];
 
-        // Try snapshot first for the whole batch
-        const url = `${BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=${pendingTickers.join(',')}&apiKey=${POLYGON_API_KEY}`;
-        const res = await fetch(url);
+        console.log(`[Market Service] Using individual fetching for ${pendingTickers.length} tickers to avoid Snapshot 403...`);
+        for (const ticker of pendingTickers) {
+            try {
+                // 1. Get Prev Close
+                const prevUrl = `${BASE_URL}/v2/aggs/ticker/${ticker}/prev?adjusted=true&apiKey=${POLYGON_API_KEY}`;
+                const prevRes = await fetch(prevUrl);
 
-        if (res.status === 403) {
-            console.warn(`[Market Service] Snapshot 403. Using individual fetching for ${pendingTickers.length} tickers...`);
-            for (const ticker of pendingTickers) {
-                try {
-                    // 1. Get Prev Close
-                    const prevUrl = `${BASE_URL}/v2/aggs/ticker/${ticker}/prev?adjusted=true&apiKey=${POLYGON_API_KEY}`;
-                    const prevRes = await fetch(prevUrl);
+                // 2. Get Last Trade (Current Price)
+                const tradeUrl = `${BASE_URL}/v1/last/stocks/${ticker}?apiKey=${POLYGON_API_KEY}`;
+                const tradeRes = await fetch(tradeUrl);
 
-                    // 2. Get Last Trade (Current Price)
-                    const tradeUrl = `${BASE_URL}/v1/last/stocks/${ticker}?apiKey=${POLYGON_API_KEY}`;
-                    const tradeRes = await fetch(tradeUrl);
-
-                    if (prevRes.status === 429 || tradeRes.status === 429) {
-                        console.warn(`[Market Service] Rate limit (429) hit at ${ticker}. Stopping batch.`);
-                        break;
-                    }
-
-                    if (prevRes.ok && tradeRes.ok) {
-                        const prevData = await prevRes.json();
-                        const tradeData = await tradeRes.json();
-
-                        const prevClose = prevData.results?.[0]?.c || 0;
-                        const lastPrice = tradeData.last?.price || tradeData.last?.p || prevClose;
-
-                        if (prevClose > 0) {
-                            const changePerc = ((lastPrice - prevClose) / prevClose) * 100;
-                            allTickersData.push({
-                                ticker: ticker,
-                                lastTrade: { p: lastPrice, t: Date.now() },
-                                todaysChangePerc: changePerc,
-                                day: { o: prevClose },
-                                prevDay: { c: prevClose }
-                            });
-                            console.log(`[Market Service] Sync'd ${ticker}: $${lastPrice} (${changePerc.toFixed(2)}%)`);
-                        } else {
-                            console.warn(`[Market Service] ${ticker} skipped: No previous close found.`);
-                        }
-                    } else {
-                        console.warn(`[Market Service] ${ticker} failed: Prev=${prevRes.status}, Trade=${tradeRes.status}`);
-                        if (!prevRes.ok) console.warn(`   Prev Error: ${await prevRes.text().catch(() => 'N/A')}`);
-                        if (!tradeRes.ok) console.warn(`   Trade Error: ${await tradeRes.text().catch(() => 'N/A')}`);
-                    }
-
-                    // Wait 1.5 seconds between tickers to stay under 5 calls/min (12s per loop)
-                    // Actually 5 calls / 60s = 1 call every 12s.
-                    // This is too slow for serverless.
-                    // We will do 2 calls per ticker, so we need 24s per ticker.
-                    // We'll just do it fast and let the user wait 60s between /api/sync clicks.
-                } catch (e: any) {
-                    console.error(`[Market Service] Fallback exception for ${ticker}:`, e.message);
+                if (prevRes.status === 429 || tradeRes.status === 429) {
+                    console.warn(`[Market Service] Rate limit (429) hit at ${ticker}. Stopping batch.`);
+                    break;
                 }
-            }
-        } else if (res.ok) {
-            const data = await res.json();
-            if (data.tickers && data.tickers.length > 0) {
-                allTickersData.push(...data.tickers);
-            } else {
-                console.warn(`[Market Service] Snapshot returned 200 OK but 0 tickers. URL: ${url.replace(POLYGON_API_KEY as string, 'HIDDEN')}`);
+
+                if (prevRes.ok && tradeRes.ok) {
+                    const prevData = await prevRes.json();
+                    const tradeData = await tradeRes.json();
+
+                    const prevClose = prevData.results?.[0]?.c || 0;
+                    const lastPrice = tradeData.last?.price || tradeData.last?.p || prevClose;
+
+                    const changePerc = prevClose > 0 ? ((lastPrice - prevClose) / prevClose) * 100 : 0;
+
+                    allTickersData.push({
+                        ticker: ticker,
+                        lastTrade: { p: lastPrice, t: Date.now() },
+                        todaysChangePerc: changePerc,
+                        day: { o: prevClose },
+                        prevDay: { c: prevClose }
+                    });
+                    console.log(`[Market Service] Sync'd ${ticker}: $${lastPrice} (${changePerc.toFixed(2)}%)`);
+                } else {
+                    // Mark as updated even if failed so we move to next tickers
+                    allTickersData.push({
+                        ticker: ticker,
+                        lastTrade: { p: 0, t: Date.now() },
+                        todaysChangePerc: 0,
+                        day: { o: 0 },
+                        prevDay: { c: 0 }
+                    });
+                    console.warn(`[Market Service] ${ticker} failed (Status: ${prevRes.status}/${tradeRes.status}). Marked to skip for next 10 mins.`);
+                }
+            } catch (e: any) {
+                console.error(`[Market Service] Exception for ${ticker}:`, e.message);
             }
         }
 

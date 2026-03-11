@@ -128,8 +128,8 @@ export async function getLiveQuotes(tickers: string[]): Promise<Record<string, L
         }
     }
 
-    // Fetch fresh data
-    console.log(`[Cache MISS] Fetching ${tickers.length} quotes from API`);
+    // Search DB
+    console.log(`[DB Search] Searching for ${tickers.length} tickers in database`);
     const results = await fetchLiveQuotesInternal(tickers);
 
     // Update global cache
