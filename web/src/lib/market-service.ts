@@ -72,9 +72,20 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
         try {
             const fs = await import('fs');
             const path = await import('path');
-            const pennyPath = path.join(process.cwd(), '../Watchlist_Penny.csv');
-            if (fs.existsSync(pennyPath)) {
-                const content = fs.readFileSync(pennyPath, 'utf-8');
+            const pennyPaths = [
+                path.join(process.cwd(), '../Watchlist_Penny.csv'),
+                path.join(process.cwd(), 'public/Watchlist_Penny.csv'),
+                path.join(process.cwd(), 'Watchlist_Penny.csv'),
+                path.join(process.cwd(), '.next/server/public/Watchlist_Penny.csv')
+            ];
+            let content = null;
+            for (const p of pennyPaths) {
+                if (fs.existsSync(p)) {
+                    content = fs.readFileSync(p, 'utf-8');
+                    break;
+                }
+            }
+            if (content) {
                 const lines = content.split('\n').filter(l => l.trim().length > 0).slice(1);
                 lines.forEach(line => {
                     const t = line.split(',')[1]?.trim().toUpperCase();

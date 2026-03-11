@@ -249,13 +249,26 @@ export async function getPennyStocks(limit: number = 200): Promise<any[]> {
     // For simplicity, we'll just fetch for now or use a dedicated global cache
 
     try {
-        const csvPath = path.join(process.cwd(), '../Watchlist_Penny.csv');
-        if (!fs.existsSync(csvPath)) {
-            console.error(`Penny Watchlist CSV not found at ${csvPath}`);
+        const csvPaths = [
+            path.join(process.cwd(), '../Watchlist_Penny.csv'),
+            path.join(process.cwd(), 'public/Watchlist_Penny.csv'),
+            path.join(process.cwd(), 'Watchlist_Penny.csv'),
+            path.join(process.cwd(), '.next/server/public/Watchlist_Penny.csv')
+        ];
+        
+        let fileContent = null;
+        for (const p of csvPaths) {
+            if (fs.existsSync(p)) {
+                fileContent = fs.readFileSync(p, 'utf-8');
+                break;
+            }
+        }
+
+        if (!fileContent) {
+            console.error(`Penny Watchlist CSV not found in any standard path.`);
             return [];
         }
 
-        const fileContent = fs.readFileSync(csvPath, 'utf-8');
         const lines = fileContent.split('\n').filter(line => line.trim() !== '');
 
         // CSV Header: Category,Ticker,ConvictionStocks,DecidingTheMarketDirections,DollarMoves
