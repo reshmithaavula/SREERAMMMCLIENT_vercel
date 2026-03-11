@@ -90,14 +90,19 @@ export async function GET(req: Request) {
             })
 
             movers.forEach((m: any) => {
+                let changePercent = m.changePercent || 0;
+                if (Math.abs(changePercent) < 0.0001 && (m.price || 0) > 0 && (m.prevClose || 0) > 0) {
+                    changePercent = ((m.price - m.prevClose) / m.prevClose) * 100;
+                }
+
                 const entry = {
                     ticker: m.ticker,
                     price: m.price || 0,
-                    change: m.changePercent || 0,
-                    changePercent: m.changePercent || 0,
+                    change: changePercent,
+                    changePercent: changePercent,
                     session: m.session || "Closed",
                     commonFlag: m.commonFlag || 0,
-                    openPrice: m.dayOpen || m.prevClose || m.price || 0, // Better fallback
+                    openPrice: m.dayOpen || m.prevClose || m.price || 0,
                     prevClose: m.prevClose || 0
                 }
 
@@ -197,13 +202,23 @@ export async function GET(req: Request) {
                 watchlist = dbWatchlist.map(w => {
                     const quote = watchlistQuotes[w.ticker] || { price: 0, changePercent: 0 };
                     const dbMover = moverMap[w.ticker];
+                    
+                    let finalPrice = quote.price || dbMover?.price || 0;
+                    let finalChange = quote.changePercent || dbMover?.changePercent || 0;
+                    let prevClose = dbMover?.prevClose || 0;
+
+                    // LIVE RECALCULATION: If change is 0 but we have price + prevClose, calculate it!
+                    if (Math.abs(finalChange) < 0.0001 && finalPrice > 0 && prevClose > 0) {
+                        finalChange = ((finalPrice - prevClose) / prevClose) * 100;
+                    }
+
                     return {
                         ...w,
                         ticker: w.ticker,
-                        price: quote.price || dbMover?.price || 0,
-                        changePercent: quote.changePercent || dbMover?.changePercent || 0,
-                        openPrice: dbMover?.dayOpen || dbMover?.prevClose || quote.price || dbMover?.price || 0,
-                        prevClose: dbMover?.prevClose || 0
+                        price: finalPrice,
+                        changePercent: finalChange,
+                        openPrice: dbMover?.dayOpen || dbMover?.prevClose || finalPrice || 0,
+                        prevClose: prevClose
                     };
                 });
 

@@ -53,11 +53,11 @@ async function fetchLiveQuotesInternal(tickers: string[]): Promise<Record<string
 
         // --- 1. PRE-FETCH FROM DATABASE (Save Quota) ---
         if (tickers.length > 0) {
-            const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000);
+            const twoHoursAgo = new Date(Date.now() - 120 * 60 * 1000);
             const dbMovers = await prisma.marketMover.findMany({
                 where: {
                     ticker: { in: tickers },
-                    updatedAt: { gt: tenMinsAgo }
+                    updatedAt: { gt: twoHoursAgo }
                 }
             });
 

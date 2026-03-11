@@ -25,7 +25,7 @@ async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercen
         
         const price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 0;
         const changePct = changePctMatch ? parseFloat(changePctMatch[1].replace(/,/g, '')) : 0;
-        const open = openMatch ? parseFloat(openMatch[1].replace(/,/g, '')) : 0;
+        const open = (openMatch && openMatch[1] !== '0.00') ? parseFloat(openMatch[1].replace(/,/g, '')) : 0;
         const prevClose = prevCloseMatch ? parseFloat(prevCloseMatch[1].replace(/,/g, '')) : 0;
         
         return { price, changePercent: changePct, open, prevClose };
@@ -162,12 +162,16 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
 
                 // ONLY UPDATE IF WE FOUND A REAL PRICE (> 0)
                 if (lastPrice > 0) {
-                    const changePerc = (prevClose > 0 && prevClose !== lastPrice) ? ((lastPrice - prevClose) / prevClose) * 100 : 0;
-                    
                     // Priority for dayOpen: CNBC exact > prevClose (from Polygon/CNBC) > lastPrice
                     let dayOpen = lastPrice;
                     if (cnbcData?.open > 0) dayOpen = cnbcData.open;
                     else if (prevClose > 0) dayOpen = prevClose;
+                    
+                    // Recalculate change percent if we have a real baseline
+                    let changePerc = cnbcData?.changePercent || 0;
+                    if (prevClose > 0 && Math.abs(changePerc) < 0.0001) {
+                        changePerc = ((lastPrice - prevClose) / prevClose) * 100;
+                    }
                     
                     allTickersData.push({
                         ticker: ticker,
