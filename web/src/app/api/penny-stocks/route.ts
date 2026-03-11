@@ -41,6 +41,8 @@ export async function GET() {
                 price: price,
                 change: change,
                 changePercent: changePct,
+                openPrice: row.dayOpen || row.price || 0,
+                prevClose: row.prevClose || 0
             };
 
             // Categorize by type

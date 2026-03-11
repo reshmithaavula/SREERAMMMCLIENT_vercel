@@ -56,15 +56,16 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
 
         // Check which ones need an update (older than 6 hours)
         // We use 6 hours so a full 2-hour manual sync can finish without looping
-        const tenMinsAgo = new Date(Date.now() - 360 * 60 * 1000);
-        const existingMovers = await prisma.marketMover.findMany({
+        const windowAgo = new Date(Date.now() - 360 * 60 * 1000);
+        const freshMovers = await prisma.marketMover.findMany({
             where: { 
-                updatedAt: { gt: tenMinsAgo },
+                ticker: { in: tickers },
+                updatedAt: { gt: windowAgo },
                 price: { gt: 0 } 
             },
             select: { ticker: true }
         });
-        const freshTickers = new Set(existingMovers.map(m => m.ticker));
+        const freshTickers = new Set(freshMovers.map(m => m.ticker));
         let pendingTickers = tickers.filter(t => !freshTickers.has(t));
 
         // PRIORITIZATION: Prioritize "Common" and "Penny" tickers
@@ -159,6 +160,7 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
                         prevClose: prevClose > 0 ? prevClose : lastPrice,
                         dayOpen: prevClose > 0 ? prevClose : lastPrice
                     });
+                    console.log(`[Market Service] Sync'd ${ticker}: $${lastPrice} (${changePerc.toFixed(2)}%) Prev: $${prevClose.toFixed(2)}`);
                 } else {
                     allTickersData.push({
                         ticker: ticker,
@@ -246,8 +248,8 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
 
         return {
             success: true,
-            message: `Batch sync complete: ${allTickersData.length} records updated. ${tickers.length - (existingMovers.length + allTickersData.length)} remaining.`,
-            remaining: tickers.length - (existingMovers.length + allTickersData.length)
+            message: `Batch sync complete: ${allTickersData.filter(d => !d.isHeartbeat).length} records updated. ${pendingTickers.length - allTickersData.length} remaining in this pass.`,
+            remaining: Math.max(0, tickers.length - (freshTickers.size + allTickersData.filter(d => !d.isHeartbeat).length))
         };
     } catch (error: any) {
         console.error('[Market Service] Sync failure:', error);

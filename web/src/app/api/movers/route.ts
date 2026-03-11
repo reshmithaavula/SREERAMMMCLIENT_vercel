@@ -188,13 +188,22 @@ export async function GET(req: Request) {
                 const { getLiveQuotes } = await import('@/lib/stock-api');
                 const watchlistQuotes = await getLiveQuotes(watchlistTickers);
 
+                const dbMovers = await prisma.marketMover.findMany({
+                    where: { ticker: { in: watchlistTickers } }
+                });
+                const moverMap: any = {};
+                dbMovers.forEach(m => { moverMap[m.ticker] = m; });
+
                 watchlist = dbWatchlist.map(w => {
                     const quote = watchlistQuotes[w.ticker] || { price: 0, changePercent: 0 };
+                    const dbMover = moverMap[w.ticker];
                     return {
                         ...w,
                         ticker: w.ticker,
-                        price: quote.price,
-                        changePercent: quote.changePercent
+                        price: quote.price || dbMover?.price || 0,
+                        changePercent: quote.changePercent || dbMover?.changePercent || 0,
+                        openPrice: dbMover?.dayOpen || dbMover?.price || 0,
+                        prevClose: dbMover?.prevClose || 0
                     };
                 });
 
