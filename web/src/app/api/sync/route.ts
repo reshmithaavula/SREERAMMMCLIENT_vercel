@@ -3,10 +3,13 @@ import { updateMarketMovers } from '@/lib/market-service';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
-        console.log('[API Sync] Manual sync triggered');
-        const result = await updateMarketMovers(2); // Process 2 at a time to stay under 5 calls/min limit
+        const { searchParams } = new URL(req.url);
+        const force = searchParams.get('force') === 'true';
+        
+        console.log(`[API Sync] Manual sync triggered${force ? ' (FORCED)' : ''}`);
+        const result = await updateMarketMovers(2, force); // Process 2 at a time
         return NextResponse.json(result);
     } catch (error: any) {
         console.error('[API Sync] Sync failed:', error.message);

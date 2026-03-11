@@ -68,6 +68,7 @@ async function fetchLiveQuotesInternal(tickers: string[]): Promise<Record<string
                         price: m.price || 0,
                         change: m.changePercent || 0,
                         changePercent: m.changePercent || 0,
+                        openPrice: m.dayOpen || 0,
                         prevClose: m.prevClose || 0,
                         lastUpdated: m.updatedAt.getTime()
                     };

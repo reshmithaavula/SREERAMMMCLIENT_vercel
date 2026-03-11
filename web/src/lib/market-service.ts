@@ -3,7 +3,7 @@ import { prisma } from './prisma';
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY || process.env.API_KEY;
 const BASE_URL = 'https://api.polygon.io';
 
-async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercent: number }> {
+async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercent: number, open: number, prevClose: number }> {
     try {
         const isCrypto = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE'].includes(ticker.toUpperCase()) || ticker.includes('-USD');
         let url = `https://www.cnbc.com/quotes/${ticker}`;
@@ -14,21 +14,26 @@ async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercen
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
             next: { revalidate: 60 }
         });
-        if (!res.ok) return { price: 0, changePercent: 0 };
+        if (!res.ok) return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
         const html = await res.text();
+        
         const priceMatch = html.match(/"price"\s*:\s*"([^"]+)"/);
         const changePctMatch = html.match(/"priceChangePercent"\s*:\s*"([^"]+)"/);
+        const openMatch = html.match(/"open"\s*:\s*"([^"]+)"/);
+        const prevCloseMatch = html.match(/"previous_close"\s*:\s*"([^"]+)"/);
         
-        let price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 0;
-        let changePct = changePctMatch ? parseFloat(changePctMatch[1].replace(/,/g, '')) : 0;
+        const price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 0;
+        const changePct = changePctMatch ? parseFloat(changePctMatch[1].replace(/,/g, '')) : 0;
+        const open = openMatch ? parseFloat(openMatch[1].replace(/,/g, '')) : 0;
+        const prevClose = prevCloseMatch ? parseFloat(prevCloseMatch[1].replace(/,/g, '')) : 0;
         
-        return { price, changePercent: changePct };
+        return { price, changePercent: changePct, open, prevClose };
     } catch (e) {
-        return { price: 0, changePercent: 0 };
+        return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
     }
 }
 
-export async function updateMarketMovers(maxToProcess: number = 20) {
+export async function updateMarketMovers(maxToProcess: number = 20, force: boolean = false) {
     if (!POLYGON_API_KEY) {
         console.error('[Market Service] No API_KEY found');
         return { success: false, message: 'No API Key' };
@@ -61,11 +66,13 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
             where: { 
                 ticker: { in: tickers },
                 updatedAt: { gt: windowAgo },
-                price: { gt: 0 } 
+                price: { gt: 0 },
+                dayOpen: { gt: 0 },
+                prevClose: { gt: 0 }
             },
             select: { ticker: true }
         });
-        const freshTickers = new Set(freshMovers.map(m => m.ticker));
+        const freshTickers = force ? new Set() : new Set(freshMovers.map(m => m.ticker));
         let pendingTickers = tickers.filter(t => !freshTickers.has(t));
 
         // PRIORITIZATION: Prioritize "Common" and "Penny" tickers
@@ -139,8 +146,10 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
                     const cnbcData = await scrapeCNBC(ticker);
                     if (cnbcData.price > 0) {
                         lastPrice = cnbcData.price;
-                        if (prevClose === 0) prevClose = lastPrice / (1 + (cnbcData.changePercent / 100));
-                        console.log(`[Market Service] CNBC Rescue for ${ticker}: $${lastPrice}`);
+                        if (cnbcData.prevClose > 0) prevClose = cnbcData.prevClose;
+                        else if (prevClose === 0) prevClose = lastPrice / (1 + (cnbcData.changePercent / 100));
+                        
+                        console.log(`[Market Service] CNBC Rescue for ${ticker}: $${lastPrice} (Prev: ${prevClose})`);
                     }
                 }
 
@@ -153,14 +162,18 @@ export async function updateMarketMovers(maxToProcess: number = 20) {
                 if (lastPrice > 0) {
                     const changePerc = (prevClose > 0 && prevClose !== lastPrice) ? ((lastPrice - prevClose) / prevClose) * 100 : 0;
                     
+                    // Priority for dayOpen: CNBC exact > prevClose (from Polygon/CNBC) > lastPrice
+                    let dayOpen = lastPrice;
+                    if (prevClose > 0) dayOpen = prevClose; // Default to prevClose for dayOpen if missing
+                    
                     allTickersData.push({
                         ticker: ticker,
                         price: lastPrice,
                         changePerc: changePerc,
                         prevClose: prevClose > 0 ? prevClose : lastPrice,
-                        dayOpen: prevClose > 0 ? prevClose : lastPrice
+                        dayOpen: dayOpen
                     });
-                    console.log(`[Market Service] Sync'd ${ticker}: $${lastPrice} (${changePerc.toFixed(2)}%) Prev: $${prevClose.toFixed(2)}`);
+                    console.log(`[Market Service] Sync'd ${ticker}: $${lastPrice} (OCHG: ${((lastPrice - dayOpen) / dayOpen * 100).toFixed(2)}%)`);
                 } else {
                     allTickersData.push({
                         ticker: ticker,

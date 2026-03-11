@@ -202,7 +202,7 @@ export async function GET(req: Request) {
                         ticker: w.ticker,
                         price: quote.price || dbMover?.price || 0,
                         changePercent: quote.changePercent || dbMover?.changePercent || 0,
-                        openPrice: dbMover?.dayOpen || dbMover?.price || 0,
+                        openPrice: dbMover?.dayOpen || 0,
                         prevClose: dbMover?.prevClose || 0
                     };
                 });
