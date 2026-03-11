@@ -76,7 +76,7 @@ export default function RegisterPage() {
                         setIsApproved(true);
                         clearInterval(interval);
                         setTimeout(() => {
-                            router.push('/admin-login');
+                            router.push('/');
                         }, 2000);
                     }
                 } catch (e) {
@@ -129,7 +129,7 @@ export default function RegisterPage() {
                             </h2>
                             <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.7, margin: '0 0 28px' }}>
                                 {isApproved ? (
-                                    <>Your account has been approved!<br />Redirecting you to login...</>
+                                    <>Your account has been approved!<br />Redirecting you to the dashboard...</>
                                 ) : (
                                     <>Your account has been created successfully!<br />
                                     An approval request has been sent to the <strong>system owner</strong>.<br />
