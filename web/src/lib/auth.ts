@@ -128,6 +128,11 @@ export const authOptions: NextAuthOptions = {
                         // If it failed because 'role' doesn't exist, we just proceed as 'user'
                     }
 
+                    if ((user as any).status === 'pending') {
+                        console.log(`[AUTH] User pending approval: ${normalizedEmail}`);
+                        throw new Error("PENDING_APPROVAL");
+                    }
+
                     console.log(`[AUTH] Login successful: ${credentials.email} (${currentRole})`);
                     return {
                         id: user.id.toString(),
@@ -180,6 +185,7 @@ export const authOptions: NextAuthOptions = {
                 token.id = (user as any).id;
                 token.role = (user as any).role;
                 token.status = (user as any).status || 'approved';
+                token.email = user.email;
             }
             return token;
         },
@@ -188,6 +194,7 @@ export const authOptions: NextAuthOptions = {
                 (session.user as any).id = token.id as string;
                 (session.user as any).role = token.role as string;
                 (session.user as any).status = token.status as string;
+                session.user.email = token.email as string;
             }
             return session;
         },
