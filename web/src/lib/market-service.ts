@@ -411,8 +411,43 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
     }
 }
 
+// Global debounce variable for Serverless environments (lives as long as the Vercel function instance)
+let isSyncing = false;
+let lastSyncGlobal = 0;
+const SYNC_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes strictly to dodge Polygon 5-calls/min rate limit on batches
+
 export async function ensureMoversAreFresh() {
-    // Disabled in Production to prevent Rate Limit (429) storm
-    // Manual sync via /api/sync is preferred for Polygon Free Tier
-    return;
+    const now = Date.now();
+
+    // 1. FAST MEMORY CHECK (Vercel warm start)
+    if (isSyncing || (now - lastSyncGlobal) < SYNC_COOLDOWN_MS) {
+        return; 
+    }
+
+    try {
+        isSyncing = true;
+        
+        // 2. DATABASE CHECK (For cold starts where memory was wiped)
+        const recentMover = await prisma.marketMover.findFirst({
+            orderBy: { updatedAt: 'desc' }
+        });
+
+        if (recentMover && (now - recentMover.updatedAt.getTime()) < SYNC_COOLDOWN_MS) {
+            lastSyncGlobal = recentMover.updatedAt.getTime();
+            isSyncing = false;
+            return;
+        }
+
+        console.log(`[Lazy Sync] Triggering background updateMarketMovers. (Last DB update: ${recentMover?.updatedAt ? new Date(recentMover.updatedAt).toLocaleTimeString() : 'Never'})`);
+        
+        // Let it run synchronously so the *current* request gets fresher data, 
+        // but limit the batch size to 20 to keep the request fast (< 5s).
+        await updateMarketMovers(20, false);
+        
+        lastSyncGlobal = Date.now();
+    } catch (e: any) {
+        console.error('[Lazy Sync] Failed:', e.message);
+    } finally {
+        isSyncing = false;
+    }
 }
