@@ -259,9 +259,19 @@ export async function GET(req: Request) {
             categories = (global as any).lastCategories || [];
         }
 
+        const sortByChange = (arr: any[], desc: boolean) =>
+            [...arr].sort((a, b) => {
+                const valA = a.changePercent || 0;
+                const valB = b.changePercent || 0;
+                return desc ? (valB - valA) : (valA - valB);
+            });
+
         return NextResponse.json({
             movers: {
-                m1, m5, m30, day,
+                m1: { rippers: sortByChange(m1.rippers, true), dippers: sortByChange(m1.dippers, false) },
+                m5: { rippers: sortByChange(m5.rippers, true), dippers: sortByChange(m5.dippers, false) },
+                m30: { rippers: sortByChange(m30.rippers, true), dippers: sortByChange(m30.dippers, false) },
+                day: { rippers: sortByChange(day.rippers, true), dippers: sortByChange(day.dippers, false) },
                 common,
                 watchlist,
                 quotes,
