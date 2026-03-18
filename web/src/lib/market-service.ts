@@ -15,7 +15,7 @@ async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercen
         });
         if (!res.ok) return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
         const html = await res.text();
-        
+
         // Strategy 1: Look for __NEXT_DATA__ JSON
         const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
         if (nextDataMatch) {
@@ -48,7 +48,7 @@ async function scrapeCNBC(ticker: string): Promise<{ price: number, changePercen
         const changePct = parseFloat(html.match(/"priceChangePercent"\s*:\s*"([^"]+)"/)?.[1]?.replace(/,/g, '') || "0");
         const open = parseFloat(html.match(/"open"\s*:\s*"([^"]+)"/)?.[1]?.replace(/,/g, '') || "0");
         let prevClose = parseFloat(html.match(/"previous_close"\s*:\s*"([^"]+)"/)?.[1]?.replace(/,/g, '') || html.match(/"closePrice"\s*:\s*"?([^",}]+)"?/)?.[1]?.replace(/,/g, '') || "0");
-        
+
         if (prevClose === 0 && Math.abs(changePct) > 0.0001 && price > 0) {
             prevClose = price / (1 + (changePct / 100));
         }
@@ -150,7 +150,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
         // We use 6 hours so a full 2-hour manual sync can finish without looping
         const windowAgo = new Date(Date.now() - 3 * 60 * 1000);
         const freshMovers = await prisma.marketMover.findMany({
-            where: { 
+            where: {
                 ticker: { in: tickers },
                 updatedAt: { gt: windowAgo },
                 price: { gt: 0.001 },      // Exclude 0.0001 placeholders
@@ -168,7 +168,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
         pendingTickers.sort((a, b) => {
             const aNorm = (['BTC', 'ETH'].includes(a) ? `${a}-USD` : a);
             const bNorm = (['BTC', 'ETH'].includes(b) ? `${b}-USD` : b);
-            
+
             const aIsCommon = commonPriority.includes(aNorm) || commonPriority.includes(a) ? 1 : 0;
             const bIsCommon = commonPriority.includes(bNorm) || commonPriority.includes(b) ? 1 : 0;
             return bIsCommon - aIsCommon;
@@ -208,7 +208,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                         prevClose = prevData.results?.[0]?.c || 0;
                     }
                 }
-                
+
                 // 2. Get Last Trade (Current Price)
                 let lastPrice = 0;
                 let tradeRes;
@@ -234,33 +234,30 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                     } catch (e) {}
                 }
 
-                // --- CNBC FALLBACK (RESILIENCY UPGRADE) ---
                 let cnbcData: any = null;
+
+                // --- YAHOO FINANCE FALLBACK (PRIMARY FALLBACK, HIGH ACCURACY JSON) ---
                 if (lastPrice === 0 || tradeRes?.status === 403 || tradeRes?.status === 429) {
-                    console.log(`[Market Service] Polygon failed/limited for ${ticker}. Trying CNBC...`);
+                    console.log(`[Market Service] Polygon failed/limited for ${ticker}. Trying Yahoo Finance...`);
+                    const yahooData = await scrapeYahoo(ticker);
+                    if (yahooData.price > 0) {
+                        lastPrice = yahooData.price;
+                        if (yahooData.prevClose > 0) prevClose = yahooData.prevClose;
+                        cnbcData = { open: yahooData.open, changePercent: yahooData.changePercent, prevClose: yahooData.prevClose };
+                        console.log(`[Market Service] Yahoo Rescue for ${ticker}: ${lastPrice} (Prev: ${prevClose})`);
+                    }
+                }
+
+                // --- CNBC FALLBACK (LAST RESORT, REGEX SCRAPING) ---
+                if (lastPrice === 0) {
+                    console.log(`[Market Service] Yahoo failed for ${ticker}. Trying CNBC...`);
                     cnbcData = await scrapeCNBC(ticker);
                     if (cnbcData.price > 0) {
                         lastPrice = cnbcData.price;
                         if (cnbcData.prevClose > 0) prevClose = cnbcData.prevClose;
                         else if (prevClose === 0) prevClose = lastPrice / (1 + (cnbcData.changePercent / 100));
                         
-                        console.log(`[Market Service] CNBC Rescue for ${ticker}: $${lastPrice} (Prev: ${prevClose})`);
-                    }
-                }
-
-                // --- YAHOO FINANCE FALLBACK (for ETFs, OTC, and obscure tickers CNBC misses) ---
-                if (lastPrice === 0) {
-                    console.log(`[Market Service] CNBC also failed for ${ticker}. Trying Yahoo Finance...`);
-                    const yahooData = await scrapeYahoo(ticker);
-                    if (yahooData.price > 0) {
-                        lastPrice = yahooData.price;
-                        if (yahooData.prevClose > 0) prevClose = yahooData.prevClose;
-                        if (!cnbcData) cnbcData = { open: yahooData.open, changePercent: yahooData.changePercent, prevClose: yahooData.prevClose };
-                        else {
-                            cnbcData.open = cnbcData.open || yahooData.open;
-                            cnbcData.changePercent = cnbcData.changePercent || yahooData.changePercent;
-                        }
-                        console.log(`[Market Service] Yahoo Rescue for ${ticker}: $${lastPrice} (Prev: ${prevClose})`);
+                        console.log(`[Market Service] CNBC Rescue for ${ticker}: ${lastPrice} (Prev: ${prevClose})`);
                     }
                 }
 
@@ -276,7 +273,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                     let dayOpen = lastPrice;
                     if (cnbcData?.open > 0) dayOpen = cnbcData.open;
                     else if (prevClose > 0) dayOpen = prevClose;
-                    
+
                     let changePerc = cnbcData?.changePercent || 0;
 
                     let finalPrevClose = prevClose;
@@ -378,7 +375,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                     changePercent: t.changePerc || 0,
                     dayOpen: t.dayOpen || 0.0001,
                     prevClose: t.prevClose || 0.0001,
-                    type: isCommon 
+                    type: isCommon
                         ? (t.changePerc >= 0 ? 'day_ripper' : 'day_dipper')
                         : (t.changePerc > 0 ? 'day_ripper' : (t.changePerc < 0 ? 'day_dipper' : 'neutral')),
                     session: currentSession,
@@ -387,7 +384,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                     common_flag: isCommon ? 1 : 0
                 };
 
-                // REVERT TO DELETE/CREATE: This is the ONLY way to ensure only ONE record exists for a ticker 
+                // REVERT TO DELETE/CREATE: This is the ONLY way to ensure only ONE record exists for a ticker
                 // if it switches types (e.g. from 'neutral' to 'day_ripper').
                 // Upsert on 'ticker_type' would create a second record!
                 await tx.marketMover.deleteMany({
@@ -421,12 +418,12 @@ export async function ensureMoversAreFresh() {
 
     // 1. FAST MEMORY CHECK (Vercel warm start)
     if (isSyncing || (now - lastSyncGlobal) < SYNC_COOLDOWN_MS) {
-        return; 
+        return;
     }
 
     try {
         isSyncing = true;
-        
+
         // 2. DATABASE CHECK (For cold starts where memory was wiped)
         const recentMover = await prisma.marketMover.findFirst({
             orderBy: { updatedAt: 'desc' }
@@ -439,11 +436,11 @@ export async function ensureMoversAreFresh() {
         }
 
         console.log(`[Lazy Sync] Triggering background updateMarketMovers. (Last DB update: ${recentMover?.updatedAt ? new Date(recentMover.updatedAt).toLocaleTimeString() : 'Never'})`);
-        
-        // Let it run synchronously so the *current* request gets fresher data, 
+
+        // Let it run synchronously so the *current* request gets fresher data,
         // but limit the batch size to 20 to keep the request fast (< 5s).
         await updateMarketMovers(15, false);
-        
+
         lastSyncGlobal = Date.now();
     } catch (e: any) {
         console.error('[Lazy Sync] Failed:', e.message);
