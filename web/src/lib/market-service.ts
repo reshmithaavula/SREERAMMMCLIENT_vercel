@@ -237,7 +237,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                 let cnbcData: any = null;
 
                 // --- YAHOO FINANCE FALLBACK (PRIMARY FALLBACK, HIGH ACCURACY JSON) ---
-                if (lastPrice === 0 || tradeRes?.status === 403 || tradeRes?.status === 429) {
+                if (lastPrice === 0 || prevClose === 0 || tradeRes?.status === 403 || tradeRes?.status === 429) {
                     console.log(`[Market Service] Polygon failed/limited for ${ticker}. Trying Yahoo Finance...`);
                     const yahooData = await scrapeYahoo(ticker);
                     if (yahooData.price > 0) {
@@ -249,7 +249,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                 }
 
                 // --- CNBC FALLBACK (LAST RESORT, REGEX SCRAPING) ---
-                if (lastPrice === 0) {
+                if (lastPrice === 0 || prevClose === 0) {
                     console.log(`[Market Service] Yahoo failed for ${ticker}. Trying CNBC...`);
                     cnbcData = await scrapeCNBC(ticker);
                     if (cnbcData.price > 0) {
