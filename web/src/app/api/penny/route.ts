@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getPennyStocks } from '@/lib/stock-api';
+import { ensureMoversAreFresh } from '@/lib/market-service';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
+        await ensureMoversAreFresh();
         const stocks = await getPennyStocks(200);
 
         return NextResponse.json({

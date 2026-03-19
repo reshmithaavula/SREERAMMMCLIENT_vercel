@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getPennyStocks, LiveQuote } from '@/lib/stock-api';
 import { prisma } from '@/lib/prisma';
+import { ensureMoversAreFresh } from '@/lib/market-service';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
+        await ensureMoversAreFresh();
         // 1. Fetch the main penny stocks list
         const stocks = await getPennyStocks(200);
         const pennyTickers = stocks.map(s => s.ticker);

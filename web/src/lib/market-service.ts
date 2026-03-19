@@ -163,7 +163,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
         let pendingTickers = tickers.filter(t => !freshTickers.has(t));
 
         // PRIORITIZATION: Prioritize "Common" and "Penny" tickers
-        const commonPriority = ['AAPL', 'AMZN', 'GOOG', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA', 'AMD', 'SPY', 'QQQ', 'BTC-USD', 'ETH-USD', 'BTC', 'ETH'];
+        const commonPriority = ['AAPL', 'AMZN', 'GOOG', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA', 'AMD', 'SPY', 'QQQ', 'BTC-USD', 'ETH-USD', 'BTC', 'ETH', 'CHPT', 'IREN', 'DNA', 'GME', 'AMC', 'WISH'];
 
         pendingTickers.sort((a, b) => {
             const aNorm = (['BTC', 'ETH'].includes(a) ? `${a}-USD` : a);

@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getMomentumStocks } from '@/lib/stock-api';
+import { ensureMoversAreFresh } from '@/lib/market-service';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
+        await ensureMoversAreFresh();
         const stocks = await getMomentumStocks(100);
         return NextResponse.json({
             stocks: Array.isArray(stocks) ? stocks : [],
