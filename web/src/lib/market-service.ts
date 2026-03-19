@@ -411,7 +411,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
 // Global debounce variable for Serverless environments (lives as long as the Vercel function instance)
 let isSyncing = false;
 let lastSyncGlobal = 0;
-const SYNC_COOLDOWN_MS = 15 * 1000; // 15 seconds to dodge Polygon 5-calls/min rate limit on batches
+const SYNC_COOLDOWN_MS = 180 * 1000; // 3 minutes - requested by user and avoids Prisma plan limits
 
 export async function ensureMoversAreFresh() {
     const now = Date.now();
@@ -439,7 +439,7 @@ export async function ensureMoversAreFresh() {
 
         // Let it run synchronously so the *current* request gets fresher data,
         // but limit the batch size to 20 to keep the request fast (< 5s).
-        await updateMarketMovers(15, false);
+        await updateMarketMovers(10, false);
 
         lastSyncGlobal = Date.now();
     } catch (e: any) {
