@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
-        await ensureMoversAreFresh();
+            // await ensureMoversAreFresh();
         // 1. Fetch the main penny stocks list
         const stocks = await getPennyStocks(200);
         const pennyTickers = stocks.map(s => s.ticker);

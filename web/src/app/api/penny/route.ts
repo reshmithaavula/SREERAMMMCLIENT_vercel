@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
-        await ensureMoversAreFresh();
+        // await ensureMoversAreFresh();
         const stocks = await getPennyStocks(200);
 
         return NextResponse.json({

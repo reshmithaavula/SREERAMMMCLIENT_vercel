@@ -16,8 +16,8 @@ export async function GET(req: Request) {
 
     try {
         // --- LAZY REFRESH ---
-        // Ensure data is fresh (updates if older than 5 mins)
-        await ensureMoversAreFresh();
+        // --- LAZY REFRESH (DISABLED TEMPORARILY DUE TO PRISMA PLAN LIMITS) ---
+        // await ensureMoversAreFresh();
 
         // -----------------------
         // WATCHLIST CACHE (Legacy/Fallback)
