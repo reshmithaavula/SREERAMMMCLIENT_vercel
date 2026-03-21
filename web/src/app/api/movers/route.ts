@@ -230,7 +230,7 @@ export async function GET(req: Request) {
                 if (csvTickers.length > 0) {
                     console.log(`[API Movers] Auto-seeding database with ${csvTickers.length} tickers from CSV`);
                     await prisma.watchlist.createMany({
-                        data: csvTickers.map(t => ({ ticker: t })),
+                        data: csvTickers.map(t => ({ ticker: t as string })),
                         skipDuplicates: true
                     });
                     const refreshedDb = await prisma.watchlist.findMany({ select: { ticker: true, category: true } });
