@@ -110,8 +110,10 @@ export async function syncTopMovers() {
                 
                 if (price === 0) return null;
 
+                const type = changePercent >= 0 ? 'day_ripper' : 'day_dipper';
+
                 return prisma.marketMover.upsert({
-                    where: { ticker_type: { ticker, type: 'day' } },
+                    where: { ticker_type: { ticker, type } },
                     update: { 
                         price, 
                         changePercent, 
@@ -120,7 +122,7 @@ export async function syncTopMovers() {
                     },
                     create: { 
                         ticker, 
-                        type: 'day', 
+                        type, 
                         price, 
                         changePercent, 
                         prevClose: t.prevDay?.c || 0 
@@ -498,6 +500,7 @@ export async function ensureMoversAreFresh() {
         await updateMarketMovers(15, false);
 
         lastSyncGlobal = Date.now();
+        (global as any).lastMoverUpdate = new Date().toISOString();
     } catch (e: any) {
         console.error('[Lazy Sync] Failed:', e.message);
     } finally {
