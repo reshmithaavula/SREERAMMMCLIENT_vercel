@@ -85,6 +85,58 @@ async function scrapeYahoo(ticker: string): Promise<{ price: number, changePerce
         return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
     }
 }
+// --- SNAPSHOT SYNC (NEW) ---
+// Fetches the entire market's top gainers and losers in ONE call.
+export async function syncTopMovers() {
+    if (!POLYGON_API_KEY) return;
+    console.log("[Market Service] Running Global Snapshot Sync...");
+    
+    try {
+        const endpoints = [
+            `${BASE_URL}/v2/snapshot/locale/us/markets/stocks/gainers?apiKey=${POLYGON_API_KEY}`,
+            `${BASE_URL}/v2/snapshot/locale/us/markets/stocks/losers?apiKey=${POLYGON_API_KEY}`
+        ];
+
+        for (const url of endpoints) {
+            const res = await fetch(url);
+            if (!res.ok) continue;
+            const data = await res.json();
+            const tickers = data.tickers || [];
+
+            const upserts = tickers.map((t: any) => {
+                const ticker = t.ticker;
+                const price = t.lastTrade?.p || t.day?.c || 0;
+                const changePercent = t.todaysChangePerc || 0;
+                
+                if (price === 0) return null;
+
+                return prisma.marketMover.upsert({
+                    where: { ticker_type: { ticker, type: 'day' } },
+                    update: { 
+                        price, 
+                        changePercent, 
+                        prevClose: t.prevDay?.c || 0,
+                        updatedAt: new Date() 
+                    },
+                    create: { 
+                        ticker, 
+                        type: 'day', 
+                        price, 
+                        changePercent, 
+                        prevClose: t.prevDay?.c || 0 
+                    }
+                });
+            }).filter(Boolean);
+
+            if (upserts.length > 0) {
+                await Promise.all(upserts);
+                console.log(`[Market Service] Snapshot Sync: Updated ${upserts.length} tickers from ${url.includes('gainers') ? 'Gainers' : 'Losers'}`);
+            }
+        }
+    } catch (e: any) {
+        console.error("[Market Service] Snapshot Sync Failed:", e.message);
+    }
+}
 
 export async function updateMarketMovers(maxToProcess: number = 20, force: boolean = false) {
     if (!POLYGON_API_KEY) {
@@ -439,7 +491,11 @@ export async function ensureMoversAreFresh() {
 
         // Let it run synchronously so the *current* request gets fresher data,
         // but limit the batch size to 20 to keep the request fast (< 5s).
-        await updateMarketMovers(10, false);
+        // --- STEP 1: GLOBAL SNAPSHOT (Instant Rippers/Dippers) ---
+        await syncTopMovers();
+
+        // --- STEP 2: BATCH UPDATE (Individual Watchlist Items) ---
+        await updateMarketMovers(15, false);
 
         lastSyncGlobal = Date.now();
     } catch (e: any) {
