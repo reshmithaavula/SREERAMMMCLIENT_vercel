@@ -16,8 +16,8 @@ export async function GET(req: Request) {
 
     try {
         // --- LAZY REFRESH ---
-        // --- LAZY REFRESH (DISABLED TEMPORARILY DUE TO PRISMA PLAN LIMITS) ---
-        // await ensureMoversAreFresh();
+        // --- LAZY REFRESH ---
+        await ensureMoversAreFresh();
 
         // -----------------------
         // WATCHLIST CACHE (Legacy/Fallback)
@@ -183,77 +183,90 @@ export async function GET(req: Request) {
         // -----------------------
         let watchlist: any[] = [];
         let categories: any[] = [];
+        
+        // Helper function to process watchlist data
+        async function processWatchlistData(items: any[]) {
+            const watchlistTickers = items.map(w => w.ticker);
+            const { getLiveQuotes } = await import('@/lib/stock-api');
+            const watchlistQuotes = await getLiveQuotes(watchlistTickers);
+
+            const dbMovers = await prisma.marketMover.findMany({
+                where: { ticker: { in: watchlistTickers } }
+            });
+            const moverMap: any = {};
+            dbMovers.forEach(m => { moverMap[m.ticker] = m; });
+
+            return items.map(w => {
+                const quote = watchlistQuotes[w.ticker] || { price: 0, changePercent: 0 };
+                const dbMover = moverMap[w.ticker];
+                
+                let finalPrice = quote.price || dbMover?.price || 0;
+                let finalChange = quote.changePercent || dbMover?.changePercent || 0;
+                let prevClose = dbMover?.prevClose || 0;
+
+                if (Math.abs(finalChange) < 0.0001 && finalPrice > 0 && prevClose > 0) {
+                    finalChange = ((finalPrice - prevClose) / prevClose) * 100;
+                }
+
+                return {
+                    ...w,
+                    ticker: w.ticker,
+                    price: finalPrice,
+                    changePercent: finalChange,
+                    openPrice: dbMover?.dayOpen || dbMover?.prevClose || finalPrice || 0,
+                    prevClose: prevClose
+                };
+            });
+        }
+
         try {
             const dbWatchlist = await prisma.watchlist.findMany({
                 select: { ticker: true, category: true }
             });
 
             if (dbWatchlist.length === 0) {
-                watchlist = [];
-                categories = [];
+                // AUTO-SEED: If DB is empty, import from the CSV cache we just read
+                const csvTickers = Array.from(allowedTickersSet);
+                if (csvTickers.length > 0) {
+                    console.log(`[API Movers] Auto-seeding database with ${csvTickers.length} tickers from CSV`);
+                    await prisma.watchlist.createMany({
+                        data: csvTickers.map(t => ({ ticker: t })),
+                        skipDuplicates: true
+                    });
+                    const refreshedDb = await prisma.watchlist.findMany({ select: { ticker: true, category: true } });
+                    watchlist = await processWatchlistData(refreshedDb);
+                } else {
+                    watchlist = [];
+                }
             } else {
-                const watchlistTickers = dbWatchlist.map(w => w.ticker);
-                const { getLiveQuotes } = await import('@/lib/stock-api');
-                const watchlistQuotes = await getLiveQuotes(watchlistTickers);
-
-                const dbMovers = await prisma.marketMover.findMany({
-                    where: { ticker: { in: watchlistTickers } }
-                });
-                const moverMap: any = {};
-                dbMovers.forEach(m => { moverMap[m.ticker] = m; });
-
-                watchlist = dbWatchlist.map(w => {
-                    const quote = watchlistQuotes[w.ticker] || { price: 0, changePercent: 0 };
-                    const dbMover = moverMap[w.ticker];
-                    
-                    let finalPrice = quote.price || dbMover?.price || 0;
-                    let finalChange = quote.changePercent || dbMover?.changePercent || 0;
-                    let prevClose = dbMover?.prevClose || 0;
-
-                    // LIVE RECALCULATION: If change is 0 but we have price + prevClose, calculate it!
-                    if (Math.abs(finalChange) < 0.0001 && finalPrice > 0 && prevClose > 0) {
-                        finalChange = ((finalPrice - prevClose) / prevClose) * 100;
-                    }
-
-                    return {
-                        ...w,
-                        ticker: w.ticker,
-                        price: finalPrice,
-                        changePercent: finalChange,
-                        openPrice: dbMover?.dayOpen || dbMover?.prevClose || finalPrice || 0,
-                        prevClose: prevClose
-                    };
-                });
-
-                // Sector Analysis
-                const sectorGroups: Record<string, { totalChange: number, count: number, gainers: number, losers: number }> = {};
-
-                watchlist.forEach(w => {
-                    const name = w.category || 'General';
-                    const change = w.changePercent || 0;
-
-                    if (!sectorGroups[name]) {
-                        sectorGroups[name] = { totalChange: 0, count: 0, gainers: 0, losers: 0 };
-                    }
-
-                    sectorGroups[name].totalChange += change;
-                    sectorGroups[name].count += 1;
-                    if (change > 0) sectorGroups[name].gainers += 1;
-                    else if (change < 0) sectorGroups[name].losers += 1;
-                });
-
-                categories = Object.entries(sectorGroups).map(([name, stats]) => ({
-                    category: name,
-                    averageChange: stats.totalChange / stats.count,
-                    totalStocks: stats.count,
-                    gainers: stats.gainers,
-                    losers: stats.losers,
-                    neutral: stats.count - stats.gainers - stats.losers,
-                    strength: (stats.gainers / stats.count) * 100
-                })).sort((a, b) => b.averageChange - a.averageChange);
-
-                (global as any).lastCategories = categories;
+                watchlist = await processWatchlistData(dbWatchlist);
             }
+            
+            // Sector Analysis
+            const sectorGroups: Record<string, { totalChange: number, count: number, gainers: number, losers: number }> = {};
+            watchlist.forEach(w => {
+                const name = w.category || 'General';
+                const change = w.changePercent || 0;
+                if (!sectorGroups[name]) {
+                    sectorGroups[name] = { totalChange: 0, count: 0, gainers: 0, losers: 0 };
+                }
+                sectorGroups[name].totalChange += change;
+                sectorGroups[name].count += 1;
+                if (change > 0) sectorGroups[name].gainers += 1;
+                else if (change < 0) sectorGroups[name].losers += 1;
+            });
+
+            categories = Object.entries(sectorGroups).map(([name, stats]) => ({
+                category: name,
+                averageChange: stats.totalChange / stats.count,
+                totalStocks: stats.count,
+                gainers: stats.gainers,
+                losers: stats.losers,
+                neutral: stats.count - stats.gainers - stats.losers,
+                strength: (stats.gainers / stats.count) * 100
+            })).sort((a, b) => b.averageChange - a.averageChange);
+
+            (global as any).lastCategories = categories;
         } catch (e) {
             console.error("[API Movers] Watchlist/Sector processing failed:", e);
             categories = (global as any).lastCategories || [];

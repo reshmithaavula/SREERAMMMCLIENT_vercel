@@ -1,7 +1,10 @@
 const { PrismaClient } = require('@prisma/client');
 
 // Force DATABASE_URL specifically for this test script
-process.env.DATABASE_URL = "postgres://63359754b7bd08c8c359ba6a4cd5fb908664fd09c5566eaac5ef98b7335ecfe9:sk_Wl9Tb4vrzWZo7LQuCm8Jh@db.prisma.io:5432/postgres?sslmode=require";
+// DATABASE_URL should be provided by environment or .env
+if (!process.env.DATABASE_URL) {
+    require('dotenv').config();
+}
 
 const prisma = new PrismaClient();
 

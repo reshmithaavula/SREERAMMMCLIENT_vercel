@@ -10,7 +10,7 @@ import { ensureMoversAreFresh } from '@/lib/market-service';
  */
 export async function GET(req: NextRequest) {
     try {
-        // await ensureMoversAreFresh();
+        await ensureMoversAreFresh();
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
