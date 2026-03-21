@@ -183,8 +183,13 @@ export async function GET(req: Request) {
         // -----------------------
         let watchlist: any[] = [];
         let categories: any[] = [];
+        let syncError: string | null = null;
         
-        // Helper function to process watchlist data
+        try {
+            await ensureMoversAreFresh();
+        } catch (e: any) {
+            syncError = e.message;
+        }       // Helper function to process watchlist data
         async function processWatchlistData(items: any[]) {
             const watchlistTickers = items.map(w => w.ticker);
             const { getLiveQuotes } = await import('@/lib/stock-api');
@@ -239,11 +244,15 @@ export async function GET(req: Request) {
                 select: { ticker: true, category: true }
             });
 
-            if (dbWatchlist.length === 0) {
-                // AUTO-SEED: If DB is empty, import from the CSV cache we just read
-                const csvTickers = Array.from(allowedTickersSet);
+                // AUTO-SEED: If DB is empty, import from the CSV cache or Hardcoded Fallback
+                let csvTickers = Array.from(allowedTickersSet);
+                if (csvTickers.length === 0) {
+                    console.log("[API Movers] CSV missing, using hardcoded fallback tickers");
+                    csvTickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AMD', 'GME', 'AMC', 'CHPT', 'IREN', 'DNA', 'SPY', 'QQQ', 'BTC-USD', 'ETH-USD'];
+                }
+
                 if (csvTickers.length > 0) {
-                    console.log(`[API Movers] Auto-seeding database with ${csvTickers.length} tickers from CSV`);
+                    console.log(`[API Movers] Auto-seeding database with ${csvTickers.length} tickers`);
                     await prisma.watchlist.createMany({
                         data: csvTickers.map(t => ({ ticker: t as string })),
                         skipDuplicates: true
@@ -330,6 +339,8 @@ export async function GET(req: Request) {
             debug: {
                 allowedTickersCount: allowedTickersSet.size,
                 marketMoversCount: allMoverTickers.length,
+                syncError,
+                engineLastPass: (global as any).lastMoverUpdate,
                 timestamp: new Date().toISOString()
             }
         });
