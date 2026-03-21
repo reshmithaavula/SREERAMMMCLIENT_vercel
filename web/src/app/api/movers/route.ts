@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import fs from 'fs'; // Still needed for some fallback logic, but priority is DB
+import fs from 'fs';
 import path from 'path';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
@@ -9,299 +9,151 @@ import { ensureMoversAreFresh } from '@/lib/market-service';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+/**
+ * API: /api/movers
+ * Restores market data and watchlists into the new PostgreSQL database.
+ */
 export async function GET(req: Request) {
-    const { searchParams } = new URL(req.url)
-    const portfolioTickers = searchParams.get('portfolio')?.split(',') || []
-    const portfolioSet = new Set(portfolioTickers.map(t => t.toUpperCase()))
+    const { searchParams } = new URL(req.url);
+    const portfolioTickers = searchParams.get('portfolio')?.split(',') || [];
+    
+    // --- TOP LEVEL VARIABLES ---
+    let m1 = { rippers: [] as any[], dippers: [] as any[] };
+    let m5 = { rippers: [] as any[], dippers: [] as any[] };
+    let m30 = { rippers: [] as any[], dippers: [] as any[] };
+    let day = { rippers: [] as any[], dippers: [] as any[] };
+    let common: any[] = [];
+    let watchlist: any[] = [];
+    let categories: any[] = [];
+    let dbPortfolio: any[] = [];
+    let quotes: Record<string, any> = {};
+    let syncError: string | null = null;
+    let allowedTickersCount = 0;
 
     try {
-        // --- LAZY REFRESH ---
-        // --- LAZY REFRESH ---
-        await ensureMoversAreFresh();
-
-        // -----------------------
-        // WATCHLIST CACHE (Legacy/Fallback)
-        // -----------------------
-        const csvPaths = [
-            path.join(process.cwd(), '../Watchlist_New.csv'),
-            path.join(process.cwd(), 'public/Watchlist_New.csv'),
-            path.join(process.cwd(), 'Watchlist_New.csv'),
-        ];
-
-        let csvPath = csvPaths[0];
-        for (const p of csvPaths) {
-            if (fs.existsSync(p)) {
-                csvPath = p;
-                break;
-            }
-        }
-
-        const CACHE_TTL = 60000
-        const getGlobalCache = () => (global as any).watchlistCache
-        const setGlobalCache = (val: any) => { (global as any).watchlistCache = val }
-
-        if (!getGlobalCache() || (Date.now() - getGlobalCache().timestamp > CACHE_TTL)) {
-            try {
-                if (fs.existsSync(csvPath)) {
-                    const stats = fs.statSync(csvPath)
-                    if (!getGlobalCache() || stats.mtimeMs !== getGlobalCache().fileMtime) {
-                        const content = fs.readFileSync(csvPath, 'utf-8')
-                        const lines = content.split('\n')
-                        const newSet = new Set<string>()
-                        for (let i = 1; i < lines.length; i++) {
-                            const parts = lines[i].split(',')
-                            if (parts.length > 1) {
-                                const t = parts[1]?.trim().toUpperCase()
-                                if (t) newSet.add(t)
-                            }
-                        }
-                        setGlobalCache({
-                            set: newSet,
-                            timestamp: Date.now(),
-                            fileMtime: stats.mtimeMs
-                        })
-                    }
-                }
-            } catch (e) {
-                console.error("[API Movers] Error reading Watchlist_New.csv:", e)
-            }
-        }
-
-        const allowedTickersSet = getGlobalCache()?.set || new Set<string>()
-
-        // -----------------------
-        // MOMENTUM FROM POSTGRES
-        // -----------------------
-        let m1 = { rippers: [] as any[], dippers: [] as any[] }
-        let m5 = { rippers: [] as any[], dippers: [] as any[] }
-        let m30 = { rippers: [] as any[], dippers: [] as any[] }
-        let day = { rippers: [] as any[], dippers: [] as any[] }
-        let common: any[] = []
-
-        try {
-            const movers = await prisma.marketMover.findMany({
-                select: {
-                    type: true,
-                    ticker: true,
-                    price: true,
-                    changePercent: true,
-                    session: true,
-                    commonFlag: true,
-                    dayOpen: true,
-                    prevClose: true
-                }
-            })
-
-            movers.forEach((m: any) => {
-                let changePercent = m.changePercent || 0;
-                if (Math.abs(changePercent) < 0.0001 && (m.price || 0) > 0 && (m.prevClose || 0) > 0) {
-                    changePercent = ((m.price - m.prevClose) / m.prevClose) * 100;
-                }
-
-                const entry = {
-                    ticker: m.ticker,
-                    price: m.price || 0,
-                    change: changePercent,
-                    changePercent: changePercent,
-                    session: m.session || "Closed",
-                    commonFlag: m.commonFlag || 0,
-                    openPrice: m.dayOpen || m.prevClose || m.price || 0,
-                    prevClose: m.prevClose || 0
-                }
-
-                if (m.type === "1m_ripper") m1.rippers.push(entry)
-                else if (m.type === "1m_dipper") m1.dippers.push(entry)
-                else if (m.type === "5m_ripper") m5.rippers.push(entry)
-                else if (m.type === "5m_dipper") m5.dippers.push(entry)
-                else if (m.type === "30m_ripper") m30.rippers.push(entry)
-                else if (m.type === "30m_dipper") m30.dippers.push(entry)
-                else if (m.type === "day_ripper") {
-                    day.rippers.push(entry);
-                    m1.rippers.push(entry);
-                    m5.rippers.push(entry);
-                    m30.rippers.push(entry);
-                }
-                else if (m.type === "day_dipper") {
-                    day.dippers.push(entry);
-                    m1.dippers.push(entry);
-                    m5.dippers.push(entry);
-                    m30.dippers.push(entry);
-                }
-
-                if (m.commonFlag === 1) common.push(entry)
-            })
-        } catch (e: any) {
-            console.error("[API Movers] Failed to fetch marketMover:", e.message)
-        }
-
-        // -----------------------
-        // FETCH USER PORTFOLIO
-        // -----------------------
-        let dbPortfolio: any[] = [];
-        try {
-            const session = await getServerSession(authOptions);
-            if (session?.user?.email) {
-                const user = await prisma.user.findUnique({
-                    where: { email: session.user.email },
-                    include: { portfolio: true }
-                });
-                if (user?.portfolio) {
-                    dbPortfolio = user.portfolio.map(p => ({
-                        ticker: p.ticker,
-                        avgCost: p.avgCost,
-                        shares: p.shares
-                    }));
-                }
-            }
-        } catch (e) {
-            console.error("[API Movers] Portfolio fetch failed:", e);
-        }
-
-        // -----------------------
-        // FETCH LIVE QUOTES
-        // -----------------------
-        const allMoverTickers = Array.from(new Set([
-            ...m1.rippers, ...m1.dippers,
-            ...m5.rippers, ...m5.dippers,
-            ...m30.rippers, ...m30.dippers,
-            ...day.rippers, ...day.dippers,
-            ...common
-        ].map(e => e.ticker)));
-
-        let quotes: Record<string, any> = {};
-        if (allMoverTickers.length > 0) {
-            try {
-                const { getLiveQuotes } = await import('@/lib/stock-api');
-                quotes = await getLiveQuotes(allMoverTickers);
-            } catch (e) {
-                console.error("[API Movers] Failed to fetch live quotes:", e);
-            }
-        }
-
-        // -----------------------
-        // FETCH WATCHLIST & SECTORS
-        // -----------------------
-        let watchlist: any[] = [];
-        let categories: any[] = [];
-        let syncError: string | null = null;
-        
+        // 1. TRIGGER SYNC (Snapshot + Batch)
         try {
             await ensureMoversAreFresh();
         } catch (e: any) {
             syncError = e.message;
-        }       // Helper function to process watchlist data
-        async function processWatchlistData(items: any[]) {
-            const watchlistTickers = items.map(w => w.ticker);
-            const { getLiveQuotes } = await import('@/lib/stock-api');
-            const watchlistQuotes = await getLiveQuotes(watchlistTickers);
+        }
 
-            const dbMovers = await prisma.marketMover.findMany({
-                where: { ticker: { in: watchlistTickers } }
-            });
-            const moverMap: any = {};
-            dbMovers.forEach(m => { moverMap[m.ticker] = m; });
+        // 2. READ LEGACY CSV CACHE (For Seeding Fallback)
+        let allowedTickers: string[] = [];
+        try {
+            const csvPath = path.join(process.cwd(), 'Watchlist_New.csv');
+            if (fs.existsSync(csvPath)) {
+                const content = fs.readFileSync(csvPath, 'utf-8');
+                const lines = content.split('\n').slice(1);
+                allowedTickers = lines.map(l => l.split(',')[1]?.trim().toUpperCase()).filter(Boolean);
+            }
+            allowedTickersCount = allowedTickers.length;
+        } catch (e) {
+            console.error("[API Movers] CSV Read error:", e);
+        }
 
-            // BACKGROUND UPSERT: Save these fresh quotes to MarketMover table so they show up in Rippers/Dippers
-            // We do this without 'await' to keep the response fast, but Prisma handles it.
-            const upserts = Object.entries(watchlistQuotes).map(([t, q]: [string, any]) => {
-                if (!q.price) return null;
-                return prisma.marketMover.upsert({
-                    where: { ticker_type: { ticker: t, type: 'day' } },
-                    update: { price: q.price, changePercent: q.changePercent || 0, updatedAt: new Date() },
-                    create: { ticker: t, type: 'day', price: q.price, changePercent: q.changePercent || 0 }
-                });
-            }).filter(Boolean);
-            
-            if (upserts.length > 0) {
-                Promise.all(upserts).catch(e => console.error("[API Movers] Watchlist upsert failed:", e));
+        // 3. FETCH DATA FROM POSTGRES
+        const movers = await prisma.marketMover.findMany();
+        movers.forEach((m: any) => {
+            const change = m.changePercent || 0;
+            const entry = {
+                ticker: m.ticker,
+                price: m.price || 0,
+                change: change,
+                changePercent: change,
+                session: m.session || "Closed",
+                commonFlag: m.commonFlag || 0,
+                openPrice: m.dayOpen || m.prevClose || m.price || 0,
+                prevClose: m.prevClose || 0
+            };
+
+            if (m.type === "day_ripper") {
+                day.rippers.push(entry);
+                m1.rippers.push(entry);
+                m5.rippers.push(entry);
+                m30.rippers.push(entry);
+            } else if (m.type === "day_dipper") {
+                day.dippers.push(entry);
+                m1.dippers.push(entry);
+                m5.dippers.push(entry);
+                m30.dippers.push(entry);
             }
 
+            if (m.commonFlag === 1) common.push(entry);
+        });
+
+        // 4. FETCH USER PORTFOLIO
+        const session = await getServerSession(authOptions);
+        if (session?.user?.email) {
+            const user = await prisma.user.findUnique({
+                where: { email: session.user.email },
+                include: { portfolio: true }
+            });
+            if (user?.portfolio) {
+                dbPortfolio = user.portfolio.map(p => ({
+                    ticker: p.ticker,
+                    avgCost: p.avgCost,
+                    shares: p.shares
+                }));
+            }
+        }
+
+        // 5. PROCESS WATCHLIST (With Auto-Seeding)
+        const dbWatchlist = await prisma.watchlist.findMany();
+        
+        async function getWatchlistData(items: any[]) {
+            const tickers = items.map(w => w.ticker);
+            const { getLiveQuotes } = await import('@/lib/stock-api');
+            const liveQuotes = await getLiveQuotes(tickers);
+
             return items.map(w => {
-                const quote = watchlistQuotes[w.ticker] || { price: 0, changePercent: 0 };
-                const dbMover = moverMap[w.ticker];
-                
-                let finalPrice = quote.price || dbMover?.price || 0;
-                let finalChange = quote.changePercent || dbMover?.changePercent || 0;
-                let prevClose = dbMover?.prevClose || 0;
-
-                if (Math.abs(finalChange) < 0.0001 && finalPrice > 0 && prevClose > 0) {
-                    finalChange = ((finalPrice - prevClose) / prevClose) * 100;
-                }
-
+                const q = liveQuotes[w.ticker] || { price: 0, changePercent: 0 };
                 return {
                     ...w,
-                    ticker: w.ticker,
-                    price: finalPrice,
-                    changePercent: finalChange,
-                    openPrice: dbMover?.dayOpen || dbMover?.prevClose || finalPrice || 0,
-                    prevClose: prevClose
+                    price: q.price,
+                    changePercent: q.changePercent
                 };
             });
         }
 
-        try {
-            const dbWatchlist = await prisma.watchlist.findMany({
-                select: { ticker: true, category: true }
+        if (dbWatchlist.length === 0) {
+            // SEEDING: If DB is empty, use CSV or common fallback
+            let seedTickers = allowedTickers.length > 0 ? allowedTickers : ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'GME', 'AMC'];
+            console.log(`[API Movers] Seeding DB with ${seedTickers.length} tickers`);
+            await prisma.watchlist.createMany({
+                data: seedTickers.map(t => ({ ticker: t })),
+                skipDuplicates: true
             });
-
-                // AUTO-SEED: If DB is empty, import from the CSV cache or Hardcoded Fallback
-                let csvTickers = Array.from(allowedTickersSet);
-                if (csvTickers.length === 0) {
-                    console.log("[API Movers] CSV missing, using hardcoded fallback tickers");
-                    csvTickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AMD', 'GME', 'AMC', 'CHPT', 'IREN', 'DNA', 'SPY', 'QQQ', 'BTC-USD', 'ETH-USD'];
-                }
-
-                if (csvTickers.length > 0) {
-                    console.log(`[API Movers] Auto-seeding database with ${csvTickers.length} tickers`);
-                    await prisma.watchlist.createMany({
-                        data: csvTickers.map(t => ({ ticker: t as string })),
-                        skipDuplicates: true
-                    });
-                    const refreshedDb = await prisma.watchlist.findMany({ select: { ticker: true, category: true } });
-                    watchlist = await processWatchlistData(refreshedDb);
-                } else {
-                    watchlist = [];
-                }
-            } else {
-                watchlist = await processWatchlistData(dbWatchlist);
-            }
-            
-            // Sector Analysis
-            const sectorGroups: Record<string, { totalChange: number, count: number, gainers: number, losers: number }> = {};
-            watchlist.forEach(w => {
-                const name = w.category || 'General';
-                const change = w.changePercent || 0;
-                if (!sectorGroups[name]) {
-                    sectorGroups[name] = { totalChange: 0, count: 0, gainers: 0, losers: 0 };
-                }
-                sectorGroups[name].totalChange += change;
-                sectorGroups[name].count += 1;
-                if (change > 0) sectorGroups[name].gainers += 1;
-                else if (change < 0) sectorGroups[name].losers += 1;
-            });
-
-            categories = Object.entries(sectorGroups).map(([name, stats]) => ({
-                category: name,
-                averageChange: stats.totalChange / stats.count,
-                totalStocks: stats.count,
-                gainers: stats.gainers,
-                losers: stats.losers,
-                neutral: stats.count - stats.gainers - stats.losers,
-                strength: (stats.gainers / stats.count) * 100
-            })).sort((a, b) => b.averageChange - a.averageChange);
-
-            (global as any).lastCategories = categories;
-        } catch (e) {
-            console.error("[API Movers] Watchlist/Sector processing failed:", e);
-            categories = (global as any).lastCategories || [];
+            const freshDb = await prisma.watchlist.findMany();
+            watchlist = await getWatchlistData(freshDb);
+        } else {
+            watchlist = await getWatchlistData(dbWatchlist);
         }
 
+        // 6. SECTOR ANALYSIS
+        const sectorGroups: Record<string, any> = {};
+        watchlist.forEach(w => {
+            const cat = w.category || 'General';
+            if (!sectorGroups[cat]) sectorGroups[cat] = { total: 0, count: 0, gainers: 0, losers: 0 };
+            sectorGroups[cat].total += w.changePercent || 0;
+            sectorGroups[cat].count++;
+            if (w.changePercent > 0) sectorGroups[cat].gainers++;
+            else if (w.changePercent < 0) sectorGroups[cat].losers++;
+        });
+
+        categories = Object.entries(sectorGroups).map(([name, stats]: [string, any]) => ({
+            category: name,
+            averageChange: stats.total / stats.count,
+            totalStocks: stats.count,
+            gainers: stats.gainers,
+            losers: stats.losers,
+            neutral: stats.count - stats.gainers - stats.losers,
+            strength: (stats.gainers / stats.count) * 100
+        })).sort((a, b) => b.averageChange - a.averageChange);
+
+        // 7. SORT HELPER
         const sortByChange = (arr: any[], desc: boolean) =>
-            [...arr].sort((a, b) => {
-                const valA = a.changePercent || 0;
-                const valB = b.changePercent || 0;
-                return desc ? (valB - valA) : (valA - valB);
-            });
+            [...arr].sort((a, b) => (desc ? (b.change - a.change) : (a.change - b.change)));
 
         return NextResponse.json({
             movers: {
@@ -311,45 +163,27 @@ export async function GET(req: Request) {
                 day: { rippers: sortByChange(day.rippers, true), dippers: sortByChange(day.dippers, false) },
                 common,
                 watchlist,
-                quotes,
-                news: [],
                 engineStatus: {
                     lastUpdate: (global as any).lastMoverUpdate || new Date().toISOString(),
-                    isLive: (global as any).lastMoverUpdate ? (Date.now() - new Date((global as any).lastMoverUpdate).getTime() < 900000) : false,
-                    statusText: (global as any).lastMoverUpdate ? (Date.now() - new Date((global as any).lastMoverUpdate).getTime() < 900000 ? 'Engine Live' : 'Engine Stale') : 'Engine Offline',
-                    statusColor: (global as any).lastMoverUpdate ? (Date.now() - new Date((global as any).lastMoverUpdate).getTime() < 900000 ? 'green' : 'yellow') : 'red',
-                    session: 'Active'
+                    isLive: !!(global as any).lastMoverUpdate,
+                    statusText: (global as any).lastMoverUpdate ? 'Engine Live' : 'Engine Starting...',
+                    statusColor: (global as any).lastMoverUpdate ? 'green' : 'yellow'
                 },
-                botStats: {
-                    tweetCount: 0,
-                    isActive: true
-                },
-                categories,
-                all: [
-                    ...m1.rippers, ...m1.dippers,
-                    ...m5.rippers, ...m5.dippers,
-                    ...m30.rippers, ...m30.dippers,
-                    ...day.rippers, ...day.dippers,
-                    ...common
-                ]
+                categories
             },
             watchlist,
             categories,
             portfolio: dbPortfolio,
             debug: {
-                allowedTickersCount: allowedTickersSet.size,
-                marketMoversCount: allMoverTickers.length,
+                allowedTickersCount,
+                marketMoversCount: movers.length,
                 syncError,
-                engineLastPass: (global as any).lastMoverUpdate,
                 timestamp: new Date().toISOString()
             }
         });
 
     } catch (error: any) {
-        console.error('[API Movers] TOP LEVEL CRASH:', error.message);
-        return NextResponse.json({
-            error: 'Fatal API error',
-            message: error.message
-        }, { status: 500 });
+        console.error('[API Movers] CRASH:', error.message);
+        return NextResponse.json({ error: 'Internal Error', message: error.message }, { status: 500 });
     }
 }
