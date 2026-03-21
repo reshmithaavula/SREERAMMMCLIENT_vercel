@@ -497,7 +497,8 @@ export async function ensureMoversAreFresh() {
         await syncTopMovers();
 
         // --- STEP 2: BATCH UPDATE (Individual Watchlist Items) ---
-        await updateMarketMovers(15, false);
+        // Increase to 100 temporarily to "fill the tank" for the new database
+        await updateMarketMovers(100, false);
 
         lastSyncGlobal = Date.now();
         (global as any).lastMoverUpdate = new Date().toISOString();

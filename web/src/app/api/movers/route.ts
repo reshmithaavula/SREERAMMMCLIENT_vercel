@@ -128,7 +128,7 @@ export async function GET(req: Request) {
                 engineStatus: {
                     lastUpdate: (global as any).lastMoverUpdate || new Date().toISOString(),
                     isLive: !!(global as any).lastMoverUpdate,
-                    statusText: (global as any).lastMoverUpdate ? 'Engine Live' : 'Engine Synched',
+                    statusText: (global as any).lastMoverUpdate ? 'Engine Live (v1.0.5)' : 'Engine Synched (v1.0.5)',
                     statusColor: 'green'
                 },
                 categories
