@@ -196,6 +196,21 @@ export async function GET(req: Request) {
             const moverMap: any = {};
             dbMovers.forEach(m => { moverMap[m.ticker] = m; });
 
+            // BACKGROUND UPSERT: Save these fresh quotes to MarketMover table so they show up in Rippers/Dippers
+            // We do this without 'await' to keep the response fast, but Prisma handles it.
+            const upserts = Object.entries(watchlistQuotes).map(([t, q]: [string, any]) => {
+                if (!q.price) return null;
+                return prisma.marketMover.upsert({
+                    where: { ticker_type: { ticker: t, type: 'day' } },
+                    update: { price: q.price, changePercent: q.changePercent || 0, updatedAt: new Date() },
+                    create: { ticker: t, type: 'day', price: q.price, changePercent: q.changePercent || 0 }
+                });
+            }).filter(Boolean);
+            
+            if (upserts.length > 0) {
+                Promise.all(upserts).catch(e => console.error("[API Movers] Watchlist upsert failed:", e));
+            }
+
             return items.map(w => {
                 const quote = watchlistQuotes[w.ticker] || { price: 0, changePercent: 0 };
                 const dbMover = moverMap[w.ticker];
