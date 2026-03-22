@@ -119,17 +119,17 @@ export async function GET(req: Request) {
 
         return NextResponse.json({
             movers: {
-                m1: { rippers: sort(m1.rippers, true).slice(0, 20), dippers: sort(m1.dippers, false).slice(0, 20) },
-                m5: { rippers: sort(m5.rippers, true).slice(0, 20), dippers: sort(m5.dippers, false).slice(0, 20) },
-                m30: { rippers: sort(m30.rippers, true).slice(0, 20), dippers: sort(m30.dippers, false).slice(0, 20) },
-                day: { rippers: sort(day.rippers, true).slice(0, 20), dippers: sort(day.dippers, false).slice(0, 20) },
+                m1: { rippers: sort(m1.rippers, true).slice(0, 50), dippers: sort(m1.dippers, false).slice(0, 50) },
+                m5: { rippers: sort(m5.rippers, true).slice(0, 50), dippers: sort(m5.dippers, false).slice(0, 50) },
+                m30: { rippers: sort(m30.rippers, true).slice(0, 50), dippers: sort(m30.dippers, false).slice(0, 50) },
+                day: { rippers: sort(day.rippers, true).slice(0, 50), dippers: sort(day.dippers, false).slice(0, 50) },
                 common,
                 watchlist,
                 engineStatus: {
                     lastUpdate: (global as any).lastMoverUpdate || new Date().toISOString(),
                     isLive: !!(global as any).lastMoverUpdate,
-                    statusText: (global as any).lastMoverUpdate ? 'Engine Live (v1.0.5)' : 'Engine Synched (v1.0.5)',
-                    statusColor: 'green'
+                    statusText: (global as any).lastMoverUpdate ? `Engine Live (v1.0.6) - ${movers.length}/${dbWatchlist.length} Synced` : 'Warming up...',
+                    statusColor: movers.length >= dbWatchlist.length ? 'green' : 'yellow'
                 },
                 categories
             },
