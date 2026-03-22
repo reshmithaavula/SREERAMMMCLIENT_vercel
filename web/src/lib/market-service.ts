@@ -85,6 +85,40 @@ async function scrapeYahoo(ticker: string): Promise<{ price: number, changePerce
         return { price: 0, changePercent: 0, open: 0, prevClose: 0 };
     }
 }
+
+// --- YAHOO BATCH QUOTE (NEW) ---
+// Fetches up to 50 tickers in ONE call. Extremely fast for full watchlist restore.
+export async function fetchBatchQuotesYahoo(tickers: string[]): Promise<Map<string, any>> {
+    const results = new Map<string, any>();
+    if (tickers.length === 0) return results;
+
+    try {
+        const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${tickers.join(',')}`;
+        const res = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            next: { revalidate: 60 }
+        });
+        if (!res.ok) return results;
+
+        const data = await res.json() as any;
+        const quotes = data?.quoteResponse?.result || [];
+
+        quotes.forEach((q: any) => {
+            if (q.symbol && (q.regularMarketPrice || q.postMarketPrice)) {
+                const symbol = q.symbol.toUpperCase();
+                results.set(symbol, {
+                    price: q.regularMarketPrice || q.postMarketPrice || 0,
+                    changePercent: q.regularMarketChangePercent || q.postMarketChangePercent || 0,
+                    open: q.regularMarketOpen || q.regularMarketPreviousClose || 0,
+                    prevClose: q.regularMarketPreviousClose || 0
+                });
+            }
+        });
+    } catch (e: any) {
+        console.error("[Market Service] Yahoo Batch Failed:", e.message);
+    }
+    return results;
+}
 // --- SNAPSHOT SYNC (NEW) ---
 // Fetches the entire market's top gainers and losers in ONE call.
 export async function syncTopMovers() {
@@ -244,143 +278,39 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
         });
         const existingMap = new Map(existingMovers.map(m => [m.ticker, m]));
 
-        console.log(`[Market Service] Using individual fetching for ${pendingTickers.length} tickers...`);
-        for (const ticker of pendingTickers) {
-            try {
-                const isCrypto = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE'].includes(ticker) || ticker.includes('-USD');
-                const normTicker = (isCrypto && !ticker.includes('-')) ? `${ticker}-USD` : ticker;
+        console.log(`[Market Service] Batch Sync: Fetching ${pendingTickers.length} tickers via Yahoo Batch...`);
+        
+        // Split tickers into chunks of 40 to avoid URL length issues
+        const chunkSize = 40;
+        for (let i = 0; i < pendingTickers.length; i += chunkSize) {
+            const chunk = pendingTickers.slice(i, i + chunkSize);
+            const batchResults = await fetchBatchQuotesYahoo(chunk);
 
+            for (const ticker of chunk) {
+                const q = batchResults.get(ticker);
                 const existing = existingMap.get(ticker);
 
-                // 1. Get Prev Close (Stocks Only for now, Polygon Free Aggs for Crypto is tricky)
-                let prevClose = 0;
-                if (!isCrypto) {
-                    const prevUrl = `${BASE_URL}/v2/aggs/ticker/${normTicker}/prev?adjusted=true&apiKey=${POLYGON_API_KEY}`;
-                    const prevRes = await fetch(prevUrl);
-                    if (prevRes.ok) {
-                        const prevData = await prevRes.json();
-                        prevClose = prevData.results?.[0]?.c || 0;
-                    }
-                }
-
-                // 2. Get Last Trade (Current Price)
-                let lastPrice = 0;
-                let tradeRes;
-                if (isCrypto) {
-                    const [base, quote] = normTicker.split('-');
-                    const tradeUrl = `${BASE_URL}/v1/last/crypto/${base}/${quote}?apiKey=${POLYGON_API_KEY}`;
-                    try {
-                        tradeRes = await fetch(tradeUrl);
-                        if (tradeRes.ok) {
-                            const tradeData = await tradeRes.json();
-                            lastPrice = tradeData.last?.price || 0;
-                            if (prevClose === 0) prevClose = lastPrice;
-                        }
-                    } catch (e) {}
-                } else {
-                    const tradeUrl = `${BASE_URL}/v1/last/stocks/${normTicker}?apiKey=${POLYGON_API_KEY}`;
-                    try {
-                        tradeRes = await fetch(tradeUrl);
-                        if (tradeRes.ok) {
-                            const tradeData = await tradeRes.json();
-                            lastPrice = tradeData.last?.price || tradeData.last?.p || 0;
-                        }
-                    } catch (e) {}
-                }
-
-                let cnbcData: any = null;
-
-                // --- YAHOO FINANCE FALLBACK (PRIMARY FALLBACK, HIGH ACCURACY JSON) ---
-                if (lastPrice === 0 || prevClose === 0 || tradeRes?.status === 403 || tradeRes?.status === 429) {
-                    console.log(`[Market Service] Polygon failed/limited for ${ticker}. Trying Yahoo Finance...`);
-                    const yahooData = await scrapeYahoo(ticker);
-                    if (yahooData.price > 0) {
-                        lastPrice = yahooData.price;
-                        if (yahooData.prevClose > 0) prevClose = yahooData.prevClose;
-                        cnbcData = { open: yahooData.open, changePercent: yahooData.changePercent, prevClose: yahooData.prevClose };
-                        console.log(`[Market Service] Yahoo Rescue for ${ticker}: ${lastPrice} (Prev: ${prevClose})`);
-                    }
-                }
-
-                // --- CNBC FALLBACK (LAST RESORT, REGEX SCRAPING) ---
-                if (lastPrice === 0 || prevClose === 0) {
-                    console.log(`[Market Service] Yahoo failed for ${ticker}. Trying CNBC...`);
-                    cnbcData = await scrapeCNBC(ticker);
-                    if (cnbcData.price > 0) {
-                        lastPrice = cnbcData.price;
-                        if (cnbcData.prevClose > 0) prevClose = cnbcData.prevClose;
-                        else if (prevClose === 0) prevClose = lastPrice / (1 + (cnbcData.changePercent / 100));
-                        
-                        console.log(`[Market Service] CNBC Rescue for ${ticker}: ${lastPrice} (Prev: ${prevClose})`);
-                    }
-                }
-
-
-                if (tradeRes?.status === 429 && lastPrice === 0) {
-                    console.warn(`[Market Service] Pure Rate limit (429) hit. Stopping batch.`);
-                    break;
-                }
-
-                // ONLY UPDATE IF WE FOUND A REAL PRICE (> 0)
-                if (lastPrice > 0) {
-                    // Priority for dayOpen: CNBC exact > prevClose (from Polygon/CNBC) > lastPrice
-                    let dayOpen = lastPrice;
-                    if (cnbcData?.open > 0) dayOpen = cnbcData.open;
-                    else if (prevClose > 0) dayOpen = prevClose;
-
-                    let changePerc = cnbcData?.changePercent || 0;
-
-                    let finalPrevClose = prevClose;
-                    if (finalPrevClose === 0 && (existing?.prevClose || 0) > 0) {
-                        finalPrevClose = existing!.prevClose!;
-                    } else if (finalPrevClose === 0) {
-                        if (Math.abs(changePerc) > 0.0001 && lastPrice > 0) {
-                            finalPrevClose = lastPrice / (1 + (changePerc / 100));
-                        } else {
-                            finalPrevClose = lastPrice;
-                        }
-                    }
-
-                    let finalDayOpen = dayOpen;
-                    if (finalDayOpen === lastPrice && (existing?.dayOpen || 0) > 0) {
-                        finalDayOpen = existing!.dayOpen!;
-                    } else if (finalDayOpen === 0) {
-                        finalDayOpen = lastPrice;
-                    }
-
-                    // Recalculate change percent if we have a real baseline but change is 0
-                    if (Math.abs(changePerc) < 0.0001 && finalPrevClose > 0 && Math.abs(lastPrice - finalPrevClose) > 0.0001) {
-                        changePerc = ((lastPrice - finalPrevClose) / finalPrevClose) * 100;
-                    }
-
+                if (q && q.price > 0) {
                     allTickersData.push({
                         ticker: ticker,
-                        price: lastPrice,
-                        changePerc: changePerc,
-                        prevClose: finalPrevClose,
-                        dayOpen: finalDayOpen
+                        price: q.price,
+                        changePerc: q.changePercent,
+                        prevClose: q.prevClose || existing?.prevClose || q.price,
+                        dayOpen: q.open || existing?.dayOpen || q.price
                     });
-                    console.log(`[Market Service] Sync'd ${ticker}: $${lastPrice} (OCHG: ${((lastPrice - finalDayOpen) / finalDayOpen * 100).toFixed(2)}%)`);
                 } else if (existing) {
-                    // If it's an existing record but we still can't get a price,
-                    // we must ensure it doesn't have exactly '0' blocking the freshMovers check.
-                    allTickersData.push({
-                        ticker: ticker,
-                        isHeartbeat: true,
-                        needsHealing: (existing.price === 0 || existing.dayOpen === 0 || existing.prevClose === 0)
-                    });
+                    // Heartbeat for existing records that failed to fetch
+                    allTickersData.push({ ticker, isHeartbeat: true });
                 } else {
-                    // Initialize empty record to prevent infinite loop of "stale" un-synced tickers
+                    // Initialize empty records
                     allTickersData.push({
-                        ticker: ticker,
-                        price: 0.0001, // Store a tiny fraction so it counts as initialized
+                        ticker,
+                        price: 0.0001,
                         changePerc: 0,
                         prevClose: 0.0001,
                         dayOpen: 0.0001
                     });
                 }
-            } catch (e: any) {
-                console.error(`[Market Service] Exception for ${ticker}:`, e.message);
             }
         }
 
