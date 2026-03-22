@@ -106,11 +106,15 @@ export async function fetchBatchQuotesYahoo(tickers: string[]): Promise<Map<stri
         quotes.forEach((q: any) => {
             if (q.symbol && (q.regularMarketPrice || q.postMarketPrice)) {
                 const symbol = q.symbol.toUpperCase();
+                const price = q.regularMarketPrice || q.postMarketPrice || 0;
+                const prevClose = q.regularMarketPreviousClose || q.previousClose || price;
+                const open = q.regularMarketOpen || q.regularMarketDayOpen || prevClose || price;
+                
                 results.set(symbol, {
-                    price: q.regularMarketPrice || q.postMarketPrice || 0,
+                    price: price,
                     changePercent: q.regularMarketChangePercent || q.postMarketChangePercent || 0,
-                    open: q.regularMarketOpen || q.regularMarketPreviousClose || 0,
-                    prevClose: q.regularMarketPreviousClose || 0
+                    open: open,
+                    prevClose: prevClose
                 });
             }
         });
@@ -351,7 +355,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                     continue;
                 }
 
-                const isCommon = ['AAPL', 'AMZN', 'GOOG', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA', 'AMD', 'SPY', 'QQQ', 'BTC', 'ETH', 'BTC-USD', 'ETH-USD', 'COIN', 'NFLX', 'PYPL', 'ADBE'].includes(t.ticker.toUpperCase());
+                const isCommon = ['AAPL', 'AMZN', 'GOOG', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA', 'AMD', 'SPY', 'QQQ', 'BTC', 'ETH', 'BTC-USD', 'ETH-USD', 'COIN', 'NFLX', 'PYPL', 'ADBE', 'TSMC', 'ARM', 'SMCI', 'AVGO', 'ASML', 'MSTR', 'MARA', 'RIOT', 'GME', 'AMC'].includes(t.ticker.toUpperCase());
 
                 const mover = {
                     ticker: t.ticker,
@@ -422,13 +426,31 @@ export async function ensureMoversAreFresh() {
         console.log(`[Lazy Sync] Triggering background updateMarketMovers. (Last DB update: ${recentMover?.updatedAt ? new Date(recentMover.updatedAt).toLocaleTimeString() : 'Never'})`);
 
         // Let it run synchronously so the *current* request gets fresher data,
-        // but limit the batch size to 20 to keep the request fast (< 5s).
+        const allWatchlist = await prisma.watchlist.findMany({ select: { ticker: true } });
+        const allTickers = allWatchlist.map(w => w.ticker);
+        
+        // Find how many are stale
+        const windowAgo = new Date(Date.now() - 15 * 60 * 1000);
+        const freshMovers = await prisma.marketMover.count({
+            where: {
+                ticker: { in: allTickers },
+                updatedAt: { gt: windowAgo },
+                price: { gt: 0.1 }
+            }
+        });
+
+        // ADAPTIVE BATCH SIZE: If more than 30% of the watchlist is stale, sync EVERYTHING (max 300)
+        // This ensures the "233 stocks" problem is fixed in one pass.
+        const staleCount = allTickers.length - freshMovers;
+        const adaptiveBatchSize = staleCount > (allTickers.length * 0.3) ? Math.min(allTickers.length, 300) : 100;
+        
+        console.log(`[Market Service] Health Check: ${freshMovers}/${allTickers.length} fresh. Syncing ${adaptiveBatchSize} tickers...`);
+
         // --- STEP 1: GLOBAL SNAPSHOT (Instant Rippers/Dippers) ---
         await syncTopMovers();
 
         // --- STEP 2: BATCH UPDATE (Individual Watchlist Items) ---
-        // Increase to 100 temporarily to "fill the tank" for the new database
-        await updateMarketMovers(100, false);
+        await updateMarketMovers(adaptiveBatchSize, false);
 
         lastSyncGlobal = Date.now();
         (global as any).lastMoverUpdate = new Date().toISOString();
