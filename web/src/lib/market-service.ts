@@ -245,9 +245,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
             where: {
                 ticker: { in: tickers },
                 updatedAt: { gt: windowAgo },
-                price: { gt: 0.001 },      // Exclude 0.0001 placeholders
-                dayOpen: { gt: 0.001 },    // Exclude 0.0001 placeholders
-                prevClose: { gt: 0.001 }   // Exclude 0.0001 placeholders
+                price: { gt: 0.1 } // Real prices only
             },
             select: { ticker: true }
         });
@@ -291,10 +289,22 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
             const batchResults = await fetchBatchQuotesYahoo(chunk);
 
             for (const ticker of chunk) {
-                const q = batchResults.get(ticker);
+                let q = batchResults.get(ticker);
                 const existing = existingMap.get(ticker);
 
-                if (q && q.price > 0) {
+                // --- FALLBACK: If Batch failed, try individual scrape ---
+                if (!q || q.price <= 0.1) {
+                    console.log(`[Market Service] Batch missed ${ticker}. Trying individual fallbacks...`);
+                    const individual = await scrapeYahoo(ticker);
+                    if (individual.price > 0.1) {
+                        q = individual;
+                    } else {
+                        const cnbc = await scrapeCNBC(ticker);
+                        if (cnbc.price > 0.1) q = cnbc;
+                    }
+                }
+
+                if (q && q.price > 0.1) {
                     allTickersData.push({
                         ticker: ticker,
                         price: q.price,
@@ -302,6 +312,7 @@ export async function updateMarketMovers(maxToProcess: number = 20, force: boole
                         prevClose: q.prevClose || existing?.prevClose || q.price,
                         dayOpen: q.open || existing?.dayOpen || q.price
                     });
+                    console.log(`[Market Service] Recovered ${ticker}: $${q.price}`);
                 } else if (existing) {
                     // Heartbeat for existing records that failed to fetch
                     allTickersData.push({ ticker, isHeartbeat: true });
@@ -439,10 +450,10 @@ export async function ensureMoversAreFresh() {
             }
         });
 
-        // ADAPTIVE BATCH SIZE: If more than 30% of the watchlist is stale, sync EVERYTHING (max 300)
+        // ADAPTIVE BATCH SIZE: If more than 30% of the watchlist is stale, sync EVERYTHING (max 350)
         // This ensures the "233 stocks" problem is fixed in one pass.
         const staleCount = allTickers.length - freshMovers;
-        const adaptiveBatchSize = staleCount > (allTickers.length * 0.3) ? Math.min(allTickers.length, 300) : 100;
+        const adaptiveBatchSize = staleCount > (allTickers.length * 0.3) ? Math.min(allTickers.length, 350) : 100;
         
         console.log(`[Market Service] Health Check: ${freshMovers}/${allTickers.length} fresh. Syncing ${adaptiveBatchSize} tickers...`);
 
