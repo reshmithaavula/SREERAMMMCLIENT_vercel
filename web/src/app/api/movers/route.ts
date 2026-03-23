@@ -35,7 +35,13 @@ export async function GET(req: Request) {
         // 2. FETCH MOVERS (Dynamic Classification)
         const movers = await prisma.marketMover.findMany();
         movers.forEach((m: any) => {
+            // SKIP DELISTED OR ZERO-VALUE STOCKS
+            if (!m.price || m.price <= 0.01) return;
+
             const changePercent = m.changePercent || 0;
+            const rawOpen = m.dayOpen || m.prevClose || m.price || 0;
+            const openPrice = (rawOpen === m.price && m.prevClose && m.prevClose > 0.01) ? m.prevClose : rawOpen;
+
             const entry = {
                 ticker: m.ticker,
                 price: m.price || 0,
@@ -43,12 +49,12 @@ export async function GET(req: Request) {
                 changePercent: changePercent,
                 session: m.session || "Closed",
                 commonFlag: m.commonFlag || 0,
-                openPrice: m.dayOpen || m.prevClose || m.price || 0,
+                openPrice: openPrice,
                 prevClose: m.prevClose || 0
             };
 
-            // DYNAMIC CLASSIFICATION: >= 0 for Rippers to ensure visibility during quiet hours
-            if (changePercent >= 0) {
+            // DYNAMIC CLASSIFICATION: Only show actual movement
+            if (changePercent > 0) {
                 day.rippers.push(entry);
                 m1.rippers.push(entry);
                 m5.rippers.push(entry);
