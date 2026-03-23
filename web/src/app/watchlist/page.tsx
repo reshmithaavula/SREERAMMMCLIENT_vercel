@@ -118,7 +118,7 @@ const miniColumns = [
 ];
 
 const MoverBox = ({ title, items, color }: { title: string, items: any[], color: 'green' | 'red' }) => (
-    <div className={`bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl overflow-hidden shadow-sm flex flex-col min-h-[100px] max-h-[160px] transition-all hover:border-[var(--accent-blue)] hover:shadow-md`}>
+    <div className={`bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl overflow-hidden shadow-sm flex flex-col min-h-[100px] max-h-[800px] transition-all hover:border-[var(--accent-blue)] hover:shadow-md`}>
         <div className={`px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest border-b ${color === 'green'
             ? 'bg-[var(--accent-green)]/5 text-[var(--accent-green)] border-[var(--accent-green)]/10'
             : 'bg-[var(--accent-red)]/5 text-[var(--accent-red)] border-[var(--accent-red)]/10'

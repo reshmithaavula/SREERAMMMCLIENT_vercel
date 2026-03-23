@@ -149,30 +149,30 @@ export default function Dashboard({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
 
                     {/* Market Movers and Portfolio Group */}
-                    <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', gridColumn: 'span 3', maxHeight: '450px' }}>
-                        <section style={{ flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
+                    <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', gridColumn: 'span 3', maxHeight: '1200px' }}>
+                        <section style={{ flex: '1.2', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
                             <h2 className={styles.sectionTitle}>🚀 Top Rippers</h2>
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--card-bg)]">
                                 <MoverTable
                                     title="DAILY RIPPERS"
-                                    movers={moverData?.day?.rippers?.slice(0, 50) || []}
+                                    movers={moverData?.day?.rippers || []}
                                     type="gainer"
                                 />
                             </div>
                         </section>
 
-                        <section style={{ flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
+                        <section style={{ flex: '1.2', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
                             <h2 className={styles.sectionTitle}>📉 Top Dippers</h2>
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--card-bg)]">
                                 <MoverTable
                                     title="DAILY DIPPERS"
-                                    movers={moverData?.day?.dippers?.slice(0, 50) || []}
+                                    movers={moverData?.day?.dippers || []}
                                     type="loser"
                                 />
                             </div>
                         </section>
 
-                        <section style={{ flex: '1.8', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
+                        <section style={{ flex: '2', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
                             <h2 className={styles.sectionTitle}>💼 Active Portfolio Summary</h2>
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--card-bg)]">
                                 <PortfolioSummary quotes={quotes} initialHoldings={portfolioHoldings} />
@@ -181,7 +181,7 @@ export default function Dashboard({
                     </div>
 
                     {/* Sector Grid */}
-                    <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', gridColumn: 'span 3', maxHeight: '400px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', gridColumn: 'span 3', maxHeight: '1200px' }}>
                         <section style={{ flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
                             <h2 className={styles.sectionTitle}>📈 Sector Leaders</h2>
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)]">
