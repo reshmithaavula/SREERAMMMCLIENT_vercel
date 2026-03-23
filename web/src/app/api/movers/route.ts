@@ -120,7 +120,18 @@ export async function GET(req: Request) {
             strength: (s.up / s.count) * 100
         })).sort((a, b) => b.averageChange - a.averageChange);
 
-        // 6. SORT & RETURN
+        // 6. FLAT QUOTES MAP (For Portfolio/Watchlist lookups)
+        const quotes: Record<string, any> = {};
+        watchlist.forEach(w => {
+            quotes[w.ticker] = {
+                price: w.price,
+                change: w.change,
+                changePercent: w.changePercent,
+                openPrice: w.openPrice
+            };
+        });
+
+        // 7. SORT & RETURN
         const sort = (rows: any[], desc: boolean) => [...rows].sort((a, b) => desc ? (b.change - a.change) : (a.change - b.change));
 
         return NextResponse.json({
@@ -131,6 +142,7 @@ export async function GET(req: Request) {
                 day: { rippers: sort(day.rippers, true).slice(0, 50), dippers: sort(day.dippers, false).slice(0, 50) },
                 common,
                 watchlist,
+                quotes,
                 engineStatus: {
                     lastUpdate: (global as any).lastMoverUpdate || new Date().toISOString(),
                     isLive: !!(global as any).lastMoverUpdate,
