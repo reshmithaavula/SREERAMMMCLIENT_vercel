@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import fs from 'fs';
-import path from 'path';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { ensureMoversAreFresh } from '@/lib/market-service';
+import { getSector } from '@/lib/sector-utils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -50,7 +49,8 @@ export async function GET(req: Request) {
                 session: m.session || "Closed",
                 commonFlag: m.commonFlag || 0,
                 openPrice: openPrice,
-                prevClose: m.prevClose || 0
+                prevClose: m.prevClose || 0,
+                category: getSector(m.ticker, m.price || 0)
             };
 
             // DYNAMIC CLASSIFICATION: Only show actual movement
