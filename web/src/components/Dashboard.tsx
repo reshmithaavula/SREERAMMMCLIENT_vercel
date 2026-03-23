@@ -147,9 +147,8 @@ export default function Dashboard({
 
                 {/* 3-Column Grid for Movers and Categories */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-
                     {/* Market Movers and Portfolio Group */}
-                    <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', gridColumn: 'span 3', maxHeight: '1200px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', gridColumn: 'span 3', maxHeight: '550px' }}>
                         <section style={{ flex: '1.2', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
                             <h2 className={styles.sectionTitle}>🚀 Top Rippers</h2>
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--card-bg)]">
@@ -160,7 +159,7 @@ export default function Dashboard({
                                 />
                             </div>
                         </section>
-
+ 
                         <section style={{ flex: '1.2', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
                             <h2 className={styles.sectionTitle}>📉 Top Dippers</h2>
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--card-bg)]">
@@ -171,17 +170,16 @@ export default function Dashboard({
                                 />
                             </div>
                         </section>
-
-                        <section style={{ flex: '2', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
+ 
+                        <section style={{ flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
                             <h2 className={styles.sectionTitle}>💼 Active Portfolio Summary</h2>
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)] bg-[var(--card-bg)]">
                                 <PortfolioSummary quotes={quotes} initialHoldings={portfolioHoldings} />
                             </div>
                         </section>
                     </div>
-
                     {/* Sector Grid */}
-                    <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', gridColumn: 'span 3', maxHeight: '1200px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', gridColumn: 'span 3', maxHeight: '550px' }}>
                         <section style={{ flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' }}>
                             <h2 className={styles.sectionTitle}>📈 Sector Leaders</h2>
                             <div className="flex-1 shadow-sm rounded-xl overflow-hidden border border-[var(--border-color)]">
@@ -227,8 +225,6 @@ export default function Dashboard({
                         </div>
                     )}
                 </div>
-
-
             </footer >
         </div >
     );

@@ -47,8 +47,8 @@ export async function GET(req: Request) {
                 prevClose: m.prevClose || 0
             };
 
-            // DYNAMIC CLASSIFICATION: Don't trust the 'type' field, trust the 'changePercent'
-            if (changePercent > 0) {
+            // DYNAMIC CLASSIFICATION: >= 0 for Rippers to ensure visibility during quiet hours
+            if (changePercent >= 0) {
                 day.rippers.push(entry);
                 m1.rippers.push(entry);
                 m5.rippers.push(entry);
